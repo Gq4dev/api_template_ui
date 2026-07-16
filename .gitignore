@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Build output
+dist/
+build/
+gen/
+resources/
+webapp/resources/
+webapp/test-resources/
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+default-env.json
+*.pem
+*.key
+
+# SAP CAP / MTA
+mta_archives/
+*.mtar
+.cds/
+cds/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Test & coverage
+coverage/
+.nyc_output/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Gentle AI tooling cache
+.atl/*.cache.json
+
+# Misc
+*.tmp
+tmp/
