@@ -5,11 +5,13 @@ node_modules/
 
 # Build output
 dist/
+dist-ssr/
 build/
 gen/
 resources/
 webapp/resources/
 webapp/test-resources/
+*.local
 
 # Environment & secrets
 .env
