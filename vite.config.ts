@@ -6,6 +6,10 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   plugins: [react()],
   test: {
+    // Fail the run if any `.only` is left in a test file (guards against an
+    // accidentally committed focused test silently skipping the rest). Vitest
+    // spells this as `allowOnly: false` (there is no `forbidOnly` option).
+    allowOnly: false,
     // Component tests (CreatePage) render Mantine + Router into a DOM.
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],

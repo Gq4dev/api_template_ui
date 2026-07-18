@@ -107,6 +107,17 @@ export function CreatePage() {
         onError: (error) => {
           const uiError = toUiError(error);
 
+          // INTEGRATION.md §8 scopes idempotency-key reuse to network-failure
+          // retries: a NETWORK/CORS failure means the request may never have
+          // reached the server, so resubmitting is a retry of the SAME attempt
+          // and must keep the key. Any typed API error (VALIDATION_ERROR,
+          // OBJECT_ALREADY_EXISTS, INVALID_STATE_TRANSITION, …) means the server
+          // rejected this attempt; a corrected resubmit is a NEW logical create
+          // and must mint a fresh key, so reset here.
+          if (uiError.kind !== "NETWORK") {
+            idempotencyManager.current.reset();
+          }
+
           if (uiError.kind === "VALIDATION_ERROR") {
             const { fieldErrors: mapped, generalDetails } =
               mapValidationDetails(uiError.fieldDetails ?? []);
