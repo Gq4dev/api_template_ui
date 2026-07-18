@@ -32,6 +32,16 @@ describe("toUiError", () => {
     expect(toUiError(error).kind).toBe("TEMPLATE_NOT_FOUND");
   });
 
+  it("maps OBJECT_NOT_FOUND", () => {
+    const error = new ApiError(404, { error: "OBJECT_NOT_FOUND" });
+    expect(toUiError(error).kind).toBe("OBJECT_NOT_FOUND");
+  });
+
+  it("maps OBJECT_ALREADY_EXISTS", () => {
+    const error = new ApiError(409, { error: "OBJECT_ALREADY_EXISTS" });
+    expect(toUiError(error).kind).toBe("OBJECT_ALREADY_EXISTS");
+  });
+
   it("maps a non-ApiError failure to NETWORK", () => {
     const result = toUiError(new TypeError("Failed to fetch"));
     expect(result.kind).toBe("NETWORK");

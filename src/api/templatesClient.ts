@@ -51,6 +51,8 @@ export const templatesApi = {
     payload: CreateTemplateRequest,
     opts?: { author?: string; idempotencyKey?: string },
   ) {
+    // Empty path is intentional: API_BASE_URL already targets the collection
+    // endpoint (/api/v1/templates), so POST goes straight to it.
     return request<CreateTemplateResponse>("", {
       method: "POST",
       headers: {
@@ -78,6 +80,9 @@ export const templatesApi = {
     });
   },
 
+  // publish() and archive() intentionally send no X-User-Email header: per the
+  // backend contract (INTEGRATION.md §8) the audit header applies to create/commit
+  // only.
   publish(templateKey: string, version: number, payload: PublishRequest) {
     return request<VersionStatusResponse>(
       `/${templateKey}/versions/${version}/publish`,
