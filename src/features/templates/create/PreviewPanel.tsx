@@ -1,14 +1,13 @@
 import {
   Alert,
-  Badge,
   Button,
   Group,
-  Paper,
   SegmentedControl,
   Stack,
   Text,
 } from "@mantine/core";
 import type { PreviewResponse, PreviewVariant } from "../../../api/types";
+import { RenderedEmail } from "../RenderedEmail";
 
 interface PreviewPanelProps {
   variant: PreviewVariant;
@@ -87,28 +86,7 @@ export function PreviewPanel({
       ) : null}
 
       {preview ? (
-        <Stack gap="xs">
-          <Group gap="xs" align="center">
-            <Badge variant="light">Subject</Badge>
-            <Text size="sm">{preview.subject ?? "(no subject)"}</Text>
-          </Group>
-          <Paper withBorder radius="sm" p={0} style={{ overflow: "hidden" }}>
-            {/*
-              srcDoc + a fully restrictive sandbox. The HTML here was typed by
-              someone else and is being rendered on our own origin, so it runs
-              with NO script execution, NO same-origin access, NO form
-              submission, NO top-level navigation. Mail clients do not run
-              scripts either, so nothing legitimate is lost — and an author who
-              pastes a <script> tag learns that here rather than in production.
-            */}
-            <iframe
-              title="Rendered email preview"
-              srcDoc={preview.html}
-              sandbox=""
-              style={{ width: "100%", height: 480, border: 0, background: "#fff" }}
-            />
-          </Paper>
-        </Stack>
+        <RenderedEmail subject={preview.subject} html={preview.html} />
       ) : null}
     </Stack>
   );

@@ -8,9 +8,15 @@ import {
   Stack,
   Table,
   Text,
+  Tooltip,
 } from "@mantine/core";
 import dayjs from "dayjs";
-import type { TemplateStatus, TemplateSummary } from "../../../api/types";
+import type {
+  PreviewVariant,
+  TemplateStatus,
+  TemplateSummary,
+} from "../../../api/types";
+import { PreviewModal } from "./PreviewModal";
 import { rowId } from "./listFilters.logic";
 
 interface TemplatesTableProps {
@@ -52,6 +58,8 @@ export function TemplatesTable({
   const [pendingArchive, setPendingArchive] = useState<TemplateSummary | null>(
     null,
   );
+  const [previewRow, setPreviewRow] = useState<TemplateSummary | null>(null);
+  const [previewVariant, setPreviewVariant] = useState<PreviewVariant>("single");
 
   function confirmArchive() {
     if (pendingArchive) onArchive(pendingArchive);
@@ -116,6 +124,30 @@ export function TemplatesTable({
                   <Table.Td>{formatDate(row.createdAt)}</Table.Td>
                   <Table.Td>
                     <Group gap="xs" wrap="nowrap">
+                      <Tooltip
+                        label={
+                          isArchived
+                            ? "Archived versions cannot be previewed: resolution skips them, so the server would return a different version than this one."
+                            : "Render this version with sample data"
+                        }
+                        withArrow
+                        multiline
+                        w={280}
+                      >
+                        {/* span: a disabled button fires no events, so the
+                            tooltip would never show on the case that most needs
+                            explaining. */}
+                        <span>
+                          <Button
+                            size="xs"
+                            variant="light"
+                            disabled={isArchived}
+                            onClick={() => setPreviewRow(row)}
+                          >
+                            Preview
+                          </Button>
+                        </span>
+                      </Tooltip>
                       <Button
                         size="xs"
                         variant="light"
@@ -142,6 +174,13 @@ export function TemplatesTable({
           </Table.Tbody>
         </Table>
       </Table.ScrollContainer>
+
+      <PreviewModal
+        row={previewRow}
+        variant={previewVariant}
+        onVariantChange={setPreviewVariant}
+        onClose={() => setPreviewRow(null)}
+      />
 
       <Modal
         opened={pendingArchive !== null}
