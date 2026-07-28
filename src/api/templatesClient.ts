@@ -1,5 +1,5 @@
 // Framework-agnostic, dependency-free (fetch) typed client.
-// Source of truth: api-template/docs/INTEGRATION.md §6.
+// Source of truth: api-template/docs/INTEGRATION.md + API.md.
 //
 // Deviation from the doc's verbatim snippet: `ApiError`'s constructor cannot use
 // TypeScript parameter-property shorthand (`constructor(readonly status: number, ...)`)
@@ -13,12 +13,17 @@ import type {
   UploadUrlRequest,
   UploadUrlResponse,
   CommitRequest,
-  PublishRequest,
   VersionStatusResponse,
   ResolveResponse,
-  RenderRequest,
-  RenderResponse,
+  TemplateContentResponse,
+  TemplateSummary,
+  PageResponse,
+  ListTemplatesParams,
   ApiErrorBody,
+  PreviewRequest,
+  PreviewResponse,
+  PreviewVariant,
+  ContractResponse,
 } from "./types";
 
 export class ApiError extends Error {
@@ -43,6 +48,18 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, body as ApiErrorBody);
   return body as T;
+}
+
+// Serializes list params into a query string, dropping undefined/empty values.
+// Numbers are stringified; page/size 0 are legitimate so only undefined/"" drop.
+function buildListQuery(params: ListTemplatesParams): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value === undefined || value === null || value === "") continue;
+    search.set(key, String(value));
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
 }
 
 export const templatesApi = {
@@ -80,16 +97,8 @@ export const templatesApi = {
     });
   },
 
-  // publish() and archive() intentionally send no X-User-Email header: per the
-  // backend contract (INTEGRATION.md §8) the audit header applies to create/commit
-  // only.
-  publish(templateKey: string, version: number, payload: PublishRequest) {
-    return request<VersionStatusResponse>(
-      `/${templateKey}/versions/${version}/publish`,
-      { method: "POST", body: JSON.stringify(payload) },
-    );
-  },
-
+  // archive() intentionally sends no X-User-Email header: per the backend
+  // contract (INTEGRATION.md §8) the audit header applies to create/commit only.
   archive(templateKey: string, version: number) {
     return request<VersionStatusResponse>(
       `/${templateKey}/versions/${version}/archive`,
@@ -98,25 +107,36 @@ export const templatesApi = {
   },
 
   // --- Read ---
+  list(params: ListTemplatesParams = {}) {
+    return request<PageResponse<TemplateSummary>>(buildListQuery(params));
+  },
+
   resolve(templateKey: string, at?: string) {
     const q = at ? `?at=${encodeURIComponent(at)}` : "";
     return request<ResolveResponse>(`/${templateKey}/resolve${q}`);
   },
 
-  // The UI's preview: renders an explicit version (works on DRAFT).
-  preview(templateKey: string, version: number, data?: RenderRequest["data"]) {
-    return request<RenderResponse>(
-      `/${templateKey}/versions/${version}/preview`,
-      { method: "POST", body: JSON.stringify({ data: data ?? {} }) },
-    );
+  // Effective version WITH html, resolved by action + actionType.
+  resolveByAction(action: string, actionType: string, at?: string) {
+    const search = new URLSearchParams({ action, actionType });
+    if (at) search.set("at", at);
+    return request<TemplateContentResponse>(`/resolve?${search.toString()}`);
   },
 
-  // Send-path render (effective-now). Usually a backend concern, exposed here for
-  // completeness — the admin UI rarely calls this.
-  render(templateKey: string, data?: RenderRequest["data"]) {
-    return request<RenderResponse>(`/${templateKey}/render`, {
+  // --- Authoring aids ---
+  // POST because it carries the draft HTML in the body, NOT because it changes
+  // state: preview stores nothing. Safe to call as often as the author asks.
+  preview(payload: PreviewRequest) {
+    return request<PreviewResponse>("/preview", {
       method: "POST",
-      body: JSON.stringify({ data: data ?? {} }),
+      body: JSON.stringify(payload),
     });
+  },
+
+  // The variables an author may use, straight from the renderer's context.
+  contract(action: string, actionType: string, variant?: PreviewVariant) {
+    const search = new URLSearchParams({ action, actionType });
+    if (variant) search.set("variant", variant);
+    return request<ContractResponse>(`/contract?${search.toString()}`);
   },
 };

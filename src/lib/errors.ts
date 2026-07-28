@@ -10,6 +10,7 @@ export type UiErrorKind =
   | "TEMPLATE_NOT_FOUND"
   | "OBJECT_NOT_FOUND"
   | "OBJECT_ALREADY_EXISTS"
+  | "VALIDATOR_UNAVAILABLE"
   | "NETWORK"
   | "UNKNOWN";
 
@@ -29,6 +30,7 @@ const CODE_TO_KIND: Record<ApiErrorCode, UiErrorKind> = {
   TEMPLATE_NOT_FOUND: "TEMPLATE_NOT_FOUND",
   OBJECT_NOT_FOUND: "OBJECT_NOT_FOUND",
   OBJECT_ALREADY_EXISTS: "OBJECT_ALREADY_EXISTS",
+  VALIDATOR_UNAVAILABLE: "VALIDATOR_UNAVAILABLE",
 };
 
 const DEFAULT_MESSAGES: Record<UiErrorKind, string> = {
@@ -37,6 +39,11 @@ const DEFAULT_MESSAGES: Record<UiErrorKind, string> = {
   TEMPLATE_NOT_FOUND: "That template/version no longer exists.",
   OBJECT_NOT_FOUND: "The referenced object no longer exists.",
   OBJECT_ALREADY_EXISTS: "That object already exists.",
+  // Deliberately says "not saved": the author's work is intact, the check just
+  // could not run. Retrying once the service is back is the correct move, which
+  // is why this is worth telling apart from a plain failure.
+  VALIDATOR_UNAVAILABLE:
+    "The template checker is unavailable, so nothing was saved. Your work is not lost — try again in a moment.",
   NETWORK: "Network error — the server is unreachable or the request was blocked (check CORS).",
   UNKNOWN: "Unexpected error.",
 };

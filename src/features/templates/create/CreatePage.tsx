@@ -1,10 +1,14 @@
-import { type FormEvent, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { type FormEvent, useRef, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
 import { Alert, Button, Container, Group, Stack, Text, Title } from "@mantine/core";
 import { useCreateTemplate } from "../../../queries/useCreateTemplate";
+import { useContract } from "../../../queries/useContract";
+import { usePreview } from "../../../queries/usePreview";
 import { IdempotencyKeyManager } from "../../../lib/idempotency";
-import { extractVariables } from "../../../lib/variables";
 import { toUiError } from "../../../lib/errors";
+import { ApiError } from "../../../api/templatesClient";
+import type { PreviewVariant } from "../../../api/types";
+import { AppHeader } from "../../../app/AppHeader";
 import { CreateForm } from "./CreateForm";
 import {
   EMPTY_CREATE_FORM_VALUES,
@@ -39,11 +43,26 @@ function persistAuthorEmail(value: string): void {
   }
 }
 
+// Builds the initial form values, prefilling action/actionType/templateKey from
+// the URL query when present. This powers the "New version" flow from the list:
+// those three fields land filled while html/subject stay blank (append-only — a
+// new version is authored from scratch, not copied).
+function initialFormValues(searchParams: URLSearchParams): CreateFormValues {
+  return {
+    ...EMPTY_CREATE_FORM_VALUES,
+    action: searchParams.get("action") ?? "",
+    actionType: searchParams.get("actionType") ?? "",
+    templateKey: searchParams.get("templateKey") ?? "",
+  };
+}
+
 // Container — owns form state, the idempotency key, the mutation, and error
 // mapping. Delegates all rendering to the presentational CreateForm.
 export function CreatePage() {
-  const [values, setValues] = useState<CreateFormValues>(
-    EMPTY_CREATE_FORM_VALUES,
+  // Read the query params once on mount; later navigations don't re-seed state.
+  const [searchParams] = useSearchParams();
+  const [values, setValues] = useState<CreateFormValues>(() =>
+    initialFormValues(searchParams),
   );
   const [fieldErrors, setFieldErrors] = useState<CreateFormFieldErrors>({});
   const [generalErrors, setGeneralErrors] = useState<string[]>([]);
@@ -58,10 +77,47 @@ export function CreatePage() {
   const idempotencyManager = useRef(new IdempotencyKeyManager());
   const mutation = useCreateTemplate();
 
-  const detectedVariables = useMemo(
-    () => extractVariables(values.html),
-    [values.html],
-  );
+  // --- Authoring aids -----------------------------------------------------
+  const [previewVariant, setPreviewVariant] = useState<PreviewVariant>("single");
+  const previewMutation = usePreview();
+
+  const action = values.action.trim();
+  const actionType = values.actionType.trim();
+  const contractReady = action !== "" && actionType !== "";
+  const contractQuery = useContract(action, actionType, previewVariant);
+
+  // A 404 from the contract means the renderer maps no template to this action.
+  // That is worth saying plainly, because creating the template will fail for
+  // exactly the same reason — better to learn it while typing the action than
+  // after writing the whole body.
+  const unknownAction =
+    contractQuery.isError &&
+    contractQuery.error instanceof ApiError &&
+    contractQuery.error.status === 404;
+
+  const canRender = contractReady && values.html.trim() !== "";
+
+  function handleRenderPreview() {
+    if (!canRender) return;
+    previewMutation.mutate({
+      action,
+      actionType,
+      html: values.html,
+      subject: values.subject.trim() || undefined,
+      variant: previewVariant,
+    });
+  }
+
+  function handlePreviewVariantChange(next: PreviewVariant) {
+    setPreviewVariant(next);
+    // The rendered mail belongs to the variant it was rendered for. Keeping it
+    // on screen under a new label would show the author the wrong email.
+    previewMutation.reset();
+  }
+
+  const previewError = previewMutation.isError
+    ? toUiError(previewMutation.error)
+    : null;
 
   function handleFieldChange<K extends keyof CreateFormValues>(
     field: K,
@@ -154,8 +210,9 @@ export function CreatePage() {
 
     return (
       <Container size="sm" py="xl">
+        <AppHeader />
         <Title order={2}>Create template</Title>
-        <Alert color="green" title="Draft created" mt="md">
+        <Alert color="green" title="Version created" mt="md">
           <Stack gap="xs">
             <Text>
               <strong>{templateKey}</strong> v{version} — status: {status}
@@ -164,8 +221,8 @@ export function CreatePage() {
               checksum: {checksum}
             </Text>
             <Group mt="sm">
-              <Button component={Link} to={`/${templateKey}/${version}/preview`}>
-                Preview this version
+              <Button component={Link} to="/">
+                Back to list
               </Button>
               <Button variant="default" onClick={handleCreateAnother}>
                 Create another
@@ -179,15 +236,27 @@ export function CreatePage() {
 
   return (
     <Container size="sm" py="xl">
+      <AppHeader />
       <Title order={2}>Create template</Title>
       <CreateForm
         values={values}
         fieldErrors={fieldErrors}
         generalErrors={generalErrors}
         networkErrorMessage={networkErrorMessage}
-        detectedVariables={detectedVariables}
         authorEmail={authorEmail}
         isSubmitting={mutation.isPending}
+        contract={contractQuery.data ?? null}
+        isContractLoading={contractQuery.isFetching}
+        contractReady={contractReady}
+        unknownAction={unknownAction}
+        previewVariant={previewVariant}
+        preview={previewMutation.data ?? null}
+        previewErrorMessage={previewError?.message ?? null}
+        previewErrorDetails={previewError?.fieldDetails ?? []}
+        isRendering={previewMutation.isPending}
+        canRender={canRender}
+        onPreviewVariantChange={handlePreviewVariantChange}
+        onRenderPreview={handleRenderPreview}
         onFieldChange={handleFieldChange}
         onAuthorEmailChange={handleAuthorEmailChange}
         onSubmit={handleSubmit}

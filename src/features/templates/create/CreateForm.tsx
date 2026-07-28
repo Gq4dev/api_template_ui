@@ -1,7 +1,6 @@
 import type { FormEvent } from "react";
 import {
   Alert,
-  Badge,
   Button,
   Group,
   Stack,
@@ -10,6 +9,13 @@ import {
   Textarea,
 } from "@mantine/core";
 import { DateTimePicker } from "@mantine/dates";
+import type {
+  ContractResponse,
+  PreviewResponse,
+  PreviewVariant,
+} from "../../../api/types";
+import { AvailableVariables } from "./AvailableVariables";
+import { PreviewPanel } from "./PreviewPanel";
 import type { CreateFormFieldErrors, CreateFormValues } from "./createForm.logic";
 
 interface CreateFormProps {
@@ -17,9 +23,23 @@ interface CreateFormProps {
   fieldErrors: CreateFormFieldErrors;
   generalErrors: string[];
   networkErrorMessage: string | null;
-  detectedVariables: string[];
   authorEmail: string;
   isSubmitting: boolean;
+  // --- variable catalogue ---
+  contract: ContractResponse | null;
+  isContractLoading: boolean;
+  contractReady: boolean;
+  unknownAction: boolean;
+  // --- preview ---
+  previewVariant: PreviewVariant;
+  preview: PreviewResponse | null;
+  previewErrorMessage: string | null;
+  previewErrorDetails: string[];
+  isRendering: boolean;
+  canRender: boolean;
+  onPreviewVariantChange: (variant: PreviewVariant) => void;
+  onRenderPreview: () => void;
+  // --- form ---
   onFieldChange: <K extends keyof CreateFormValues>(
     field: K,
     value: CreateFormValues[K],
@@ -35,9 +55,20 @@ export function CreateForm({
   fieldErrors,
   generalErrors,
   networkErrorMessage,
-  detectedVariables,
   authorEmail,
   isSubmitting,
+  contract,
+  isContractLoading,
+  contractReady,
+  unknownAction,
+  previewVariant,
+  preview,
+  previewErrorMessage,
+  previewErrorDetails,
+  isRendering,
+  canRender,
+  onPreviewVariantChange,
+  onRenderPreview,
   onFieldChange,
   onAuthorEmailChange,
   onSubmit,
@@ -47,8 +78,9 @@ export function CreateForm({
       <Stack gap="md" mt="md">
         <Alert color="blue" title="Every save creates a new version">
           There is no edit-in-place: submitting this form always creates a
-          brand-new DRAFT version. To change an existing template, create
-          another version from here instead.
+          brand-new version that takes effect at creation (ACTIVE now, or
+          SCHEDULED if you set a future effective-from). To change an existing
+          template, create another version from here instead.
         </Alert>
 
         {networkErrorMessage ? (
@@ -101,8 +133,10 @@ export function CreateForm({
 
         <Textarea
           label="HTML body"
-          description="Full HTML body. Use {{placeholder}} for variables the template needs."
-          placeholder="<html>...</html>"
+          description={
+            'Jinja2. Extend the base layout and fill the title and content blocks: {% extends "base.html.j2" %}. Redefining header or footer is refused — branding stays with the platform.'
+          }
+          placeholder={'{% extends "base.html.j2" %}\n{% block content %}...{% endblock %}'}
           required
           autosize
           minRows={10}
@@ -112,37 +146,35 @@ export function CreateForm({
           error={fieldErrors.html}
         />
 
-        <div>
-          <Text size="sm" fw={500} mb={4}>
-            Detected variables
-          </Text>
-          {detectedVariables.length > 0 ? (
-            <Group gap="xs">
-              {detectedVariables.map((name) => (
-                <Badge key={name} variant="light">
-                  {name}
-                </Badge>
-              ))}
-            </Group>
-          ) : (
-            <Text size="sm" c="dimmed">
-              No {"{{placeholders}}"} detected yet — this is a best-effort
-              preview only; the backend derives the real variable list.
-            </Text>
-          )}
-        </div>
+        <AvailableVariables
+          contract={contract}
+          isLoading={isContractLoading}
+          ready={contractReady}
+          unknownAction={unknownAction}
+        />
 
         <TextInput
           label="Subject"
-          description="Optional — may contain {{placeholders}}."
+          description="Optional — may contain Jinja, e.g. {{ commerce.name }}. Comes back rendered in the preview."
           value={values.subject}
           onChange={(event) => onFieldChange("subject", event.currentTarget.value)}
           error={fieldErrors.subject}
         />
 
+        <PreviewPanel
+          variant={previewVariant}
+          preview={preview}
+          errorMessage={previewErrorMessage}
+          errorDetails={previewErrorDetails}
+          isRendering={isRendering}
+          canRender={canRender}
+          onVariantChange={onPreviewVariantChange}
+          onRender={onRenderPreview}
+        />
+
         <DateTimePicker
           label="Effective from"
-          description="Optional now — required later to publish this version."
+          description="Optional. A future time schedules this version (SCHEDULED); leaving it blank or setting now/past makes it ACTIVE immediately."
           clearable
           value={values.effectiveFrom}
           onChange={(value) => onFieldChange("effectiveFrom", value)}

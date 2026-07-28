@@ -70,7 +70,7 @@ function idempotencyKeyOfCall(
 const SUCCESS_RESPONSE = {
   templateKey: "order-created",
   version: 1,
-  status: "DRAFT" as const,
+  status: "ACTIVE" as const,
   s3Key: "s3://bucket/order-created/1.html",
   checksum: "sha256:abc123",
 };
@@ -95,7 +95,7 @@ describe("CreatePage", () => {
     vi.mocked(templatesApi.create).mockResolvedValueOnce({
       templateKey: "order-created",
       version: 1,
-      status: "DRAFT",
+      status: "ACTIVE",
       s3Key: "s3://bucket/order-created/1.html",
       checksum: "sha256:abc123",
     });
@@ -117,7 +117,7 @@ describe("CreatePage", () => {
     await user.click(screen.getByRole("button", { name: /create template/i }));
 
     expect(
-      await screen.findByText(/status: DRAFT/i),
+      await screen.findByText(/status: ACTIVE/i),
     ).toBeInTheDocument();
     expect(screen.getByText("order-created", { exact: false })).toBeInTheDocument();
 
@@ -226,7 +226,7 @@ describe("CreatePage", () => {
     await fillRequiredFields(user);
     await user.click(submitButton());
 
-    expect(await screen.findByText(/status: DRAFT/i)).toBeInTheDocument();
+    expect(await screen.findByText(/status: ACTIVE/i)).toBeInTheDocument();
     const key1 = idempotencyKeyOfCall(templatesApi.create, 0);
 
     // "Create another" resets the form for an unrelated create attempt.
