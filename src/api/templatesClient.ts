@@ -41,6 +41,16 @@ export class ApiError extends Error {
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const res = await fetch(`${API_BASE_URL}${path}`, {
     ...init,
+    // The deployed API sits behind an edge credential. fetch defaults to
+    // "same-origin", which drops credentials on exactly the cross-origin calls
+    // that need them — the request then arrives anonymous and comes back 401
+    // no matter how the CORS policy is written.
+    //
+    // Note the browser will NOT prompt for basic auth on a cross-origin fetch:
+    // it only reuses credentials already cached for that origin. Until the
+    // Keycloak flow lands, authenticate once by opening the API URL in a tab.
+    // Against a local API with no edge auth this changes nothing.
+    credentials: "include",
     headers: { "Content-Type": "application/json", ...(init.headers ?? {}) },
   });
 

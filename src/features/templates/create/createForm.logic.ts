@@ -122,3 +122,44 @@ export function mapValidationDetails(
 
   return { fieldErrors, generalDetails };
 }
+
+/**
+ * A working starter template for the HTML body.
+ *
+ * Built from the action's own contract rather than hard-coded, so the example
+ * references variables that actually exist for THIS action and renders on the
+ * first try. A generic sample that fails validation teaches the wrong lesson —
+ * the author starts by debugging the example instead of writing the mail.
+ *
+ * The structure is the part worth copying, and it is the part people get wrong:
+ * `extends` first, then only the `title` and `content` blocks. Anything written
+ * outside a block is silently dropped by Jinja inheritance — no error, no
+ * output — which is the single most common way a template comes back blank.
+ */
+export function buildStarterTemplate(variables: string[]): string {
+  // Prefer scalars a reader recognises. `commerce` and `payer` are objects, so
+  // printing them raw would dump a dict into the mail; they need a field.
+  const preferred = ["customer_name", "currency_id", "final_amount", "link"];
+  const picked = preferred.filter((name) => variables.includes(name));
+  const fallback = variables
+    .filter((name) => !["commerce", "payer", "payments", "details", "properties", "payload"].includes(name))
+    .slice(0, 3);
+  const chosen = picked.length > 0 ? picked : fallback;
+
+  const lines = chosen.length
+    ? chosen.map((name) => `  <p>${name}: {{ ${name} }}</p>`)
+    : ["  <p>Escribí el contenido del mail acá.</p>"];
+
+  return [
+    '{% extends "base.html.j2" %}',
+    "",
+    "{% block title %}Título del mail{% endblock %}",
+    "",
+    "{% block content %}",
+    ...lines,
+    "",
+    "  {# Todo lo que esté FUERA de un block no se renderiza. #}",
+    "{% endblock %}",
+    "",
+  ].join("\n");
+}

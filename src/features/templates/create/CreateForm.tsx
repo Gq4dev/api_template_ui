@@ -7,6 +7,7 @@ import {
   Text,
   TextInput,
   Textarea,
+  Tooltip,
 } from "@mantine/core";
 import { DateTimePicker } from "@mantine/dates";
 import type {
@@ -31,6 +32,8 @@ interface CreateFormProps {
   contractReady: boolean;
   unknownAction: boolean;
   // --- preview ---
+  canInsertStarter: boolean;
+  onInsertStarter: () => void;
   previewVariant: PreviewVariant;
   preview: PreviewResponse | null;
   previewErrorMessage: string | null;
@@ -61,6 +64,8 @@ export function CreateForm({
   isContractLoading,
   contractReady,
   unknownAction,
+  canInsertStarter,
+  onInsertStarter,
   previewVariant,
   preview,
   previewErrorMessage,
@@ -130,6 +135,39 @@ export function CreateForm({
           }
           error={fieldErrors.templateKey}
         />
+
+        {/*
+          The button sits in its own row rather than replacing the field's
+          label. Mantine ties Textarea's `label` to the control, and moving that
+          text here left the textarea with no accessible name — a screen reader
+          announced a bare "text box". The component tests query by role and
+          name, which is why they caught it.
+        */}
+        <Group justify="flex-end" gap="xs" mb={-8}>
+          <Tooltip
+            label={
+              canInsertStarter
+                ? "Fills the field with a working skeleton using this action's own variables"
+                : contractReady
+                  ? "Clear the body first — this would overwrite what you wrote"
+                  : "Fill in action and action type first"
+            }
+            withArrow
+            multiline
+            w={260}
+          >
+            <span>
+              <Button
+                size="compact-xs"
+                variant="subtle"
+                disabled={!canInsertStarter}
+                onClick={onInsertStarter}
+              >
+                Insert example
+              </Button>
+            </span>
+          </Tooltip>
+        </Group>
 
         <Textarea
           label="HTML body"

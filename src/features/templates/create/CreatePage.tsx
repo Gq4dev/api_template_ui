@@ -13,6 +13,7 @@ import { CreateForm } from "./CreateForm";
 import {
   EMPTY_CREATE_FORM_VALUES,
   buildCreatePayload,
+  buildStarterTemplate,
   mapValidationDetails,
   validateCreateForm,
   type CreateFormFieldErrors,
@@ -96,6 +97,16 @@ export function CreatePage() {
     contractQuery.error.status === 404;
 
   const canRender = contractReady && values.html.trim() !== "";
+
+  // Only offered on an empty body: the example is a starting point, and
+  // silently replacing something an author already typed is never worth it.
+  const canInsertStarter =
+    contractQuery.data != null && values.html.trim() === "";
+
+  function handleInsertStarter() {
+    if (!canInsertStarter || !contractQuery.data) return;
+    handleFieldChange("html", buildStarterTemplate(contractQuery.data.variables));
+  }
 
   function handleRenderPreview() {
     if (!canRender) return;
@@ -249,6 +260,8 @@ export function CreatePage() {
         isContractLoading={contractQuery.isFetching}
         contractReady={contractReady}
         unknownAction={unknownAction}
+        canInsertStarter={canInsertStarter}
+        onInsertStarter={handleInsertStarter}
         previewVariant={previewVariant}
         preview={previewMutation.data ?? null}
         previewErrorMessage={previewError?.message ?? null}

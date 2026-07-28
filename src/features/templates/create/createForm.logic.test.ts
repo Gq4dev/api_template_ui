@@ -3,6 +3,7 @@ import {
   EMPTY_CREATE_FORM_VALUES,
   buildCreatePayload,
   mapValidationDetails,
+  buildStarterTemplate,
   validateCreateForm,
 } from "./createForm.logic";
 
@@ -107,5 +108,30 @@ describe("mapValidationDetails", () => {
       "effectiveTo must be after effectiveFrom",
       "unknownField: something",
     ]);
+  });
+});
+
+describe("buildStarterTemplate", () => {
+  it("uses variables the action actually provides", () => {
+    const out = buildStarterTemplate(["customer_name", "link", "commerce"]);
+    expect(out).toContain("{{ customer_name }}");
+    expect(out).toContain("{{ link }}");
+  });
+
+  it("never prints an object variable raw — that would dump a dict into the mail", () => {
+    const out = buildStarterTemplate(["commerce", "payer", "payments"]);
+    expect(out).not.toContain("{{ commerce }}");
+    expect(out).not.toContain("{{ payer }}");
+    expect(out).not.toContain("{{ payments }}");
+  });
+
+  it("always emits the structure that makes a template render at all", () => {
+    const out = buildStarterTemplate([]);
+    expect(out.startsWith('{% extends "base.html.j2" %}')).toBe(true);
+    expect(out).toContain("{% block content %}");
+    expect(out).toContain("{% endblock %}");
+    // Only title and content: the client profile refuses header/footer.
+    expect(out).not.toContain("{% block header %}");
+    expect(out).not.toContain("{% block footer %}");
   });
 });

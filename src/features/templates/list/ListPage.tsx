@@ -95,7 +95,8 @@ export function ListPage() {
         />
         <TextInput
           label="Template key"
-          placeholder="order-created"
+          description="Matches any part of the key"
+          placeholder="payment"
           value={filters.templateKey}
           onChange={(event) =>
             updateFilter("templateKey", event.currentTarget.value)
@@ -103,7 +104,8 @@ export function ListPage() {
         />
         <TextInput
           label="Action"
-          placeholder="ORDER"
+          description="Matches any part of the action"
+          placeholder="payment"
           value={filters.action}
           onChange={(event) => updateFilter("action", event.currentTarget.value)}
         />
