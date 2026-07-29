@@ -9,7 +9,6 @@ import {
   Textarea,
   Tooltip,
 } from "@mantine/core";
-import { DateTimePicker } from "@mantine/dates";
 import type {
   ContractResponse,
   PreviewResponse,
@@ -20,6 +19,13 @@ import { PreviewPanel } from "./PreviewPanel";
 import type { CreateFormFieldErrors, CreateFormValues } from "./createForm.logic";
 
 interface CreateFormProps {
+  /**
+   * "create" authors a brand-new draft; "edit" rewrites an existing one in place.
+   * The difference is not cosmetic: in edit mode the version already exists, so
+   * what it is FOR (action, actionType, templateKey) is settled and locked — only
+   * what it SAYS can still change.
+   */
+  mode?: "create" | "edit";
   values: CreateFormValues;
   fieldErrors: CreateFormFieldErrors;
   generalErrors: string[];
@@ -54,6 +60,7 @@ interface CreateFormProps {
 // Presentational — owns no state, no fetch calls. All values/handlers come
 // from the CreatePage container.
 export function CreateForm({
+  mode = "create",
   values,
   fieldErrors,
   generalErrors,
@@ -78,15 +85,23 @@ export function CreateForm({
   onAuthorEmailChange,
   onSubmit,
 }: CreateFormProps) {
+  const isEdit = mode === "edit";
+
   return (
     <form onSubmit={onSubmit} noValidate>
       <Stack gap="md" mt="md">
-        <Alert color="blue" title="Every save creates a new version">
-          There is no edit-in-place: submitting this form always creates a
-          brand-new version that takes effect at creation (ACTIVE now, or
-          SCHEDULED if you set a future effective-from). To change an existing
-          template, create another version from here instead.
-        </Alert>
+        {isEdit ? (
+          <Alert color="yellow" title="Editing a draft">
+            Saving overwrites this draft in place — same version number, no new
+            version created. Nothing reaches customers until you publish it.
+          </Alert>
+        ) : (
+          <Alert color="blue" title="Each save here creates a new version">
+            Submitting this form creates a brand-new version as a draft. To change
+            a draft you already saved, edit it from the templates list instead —
+            that keeps the same version number.
+          </Alert>
+        )}
 
         {networkErrorMessage ? (
           <Alert color="orange" title="Network error">
@@ -95,7 +110,10 @@ export function CreateForm({
         ) : null}
 
         {generalErrors.length > 0 ? (
-          <Alert color="red" title="Could not create template">
+          <Alert
+            color="red"
+            title={isEdit ? "Could not save the draft" : "Could not create template"}
+          >
             <Stack gap={4}>
               {generalErrors.map((detail) => (
                 <Text key={detail} size="sm">
@@ -106,10 +124,14 @@ export function CreateForm({
           </Alert>
         ) : null}
 
+        {/* Locked in edit mode: these identify the version, and the API takes no
+            such fields on an update. Rendering them editable would let someone
+            change what looks like the target and then watch the save ignore it. */}
         <TextInput
           label="Action"
           placeholder="ORDER"
           required
+          disabled={isEdit}
           value={values.action}
           onChange={(event) => onFieldChange("action", event.currentTarget.value)}
           error={fieldErrors.action}
@@ -119,6 +141,7 @@ export function CreateForm({
           label="Action type"
           placeholder="CREATED"
           required
+          disabled={isEdit}
           value={values.actionType}
           onChange={(event) =>
             onFieldChange("actionType", event.currentTarget.value)
@@ -128,7 +151,12 @@ export function CreateForm({
 
         <TextInput
           label="Template key"
-          description="Optional — derived from action + actionType when left blank."
+          description={
+            isEdit
+              ? "Fixed for this version."
+              : "Optional — derived from action + actionType when left blank."
+          }
+          disabled={isEdit}
           value={values.templateKey}
           onChange={(event) =>
             onFieldChange("templateKey", event.currentTarget.value)
@@ -210,15 +238,6 @@ export function CreateForm({
           onRender={onRenderPreview}
         />
 
-        <DateTimePicker
-          label="Effective from"
-          description="Optional. A future time schedules this version (SCHEDULED); leaving it blank or setting now/past makes it ACTIVE immediately."
-          clearable
-          value={values.effectiveFrom}
-          onChange={(value) => onFieldChange("effectiveFrom", value)}
-          error={fieldErrors.effectiveFrom}
-        />
-
         <TextInput
           label="Author email"
           description="Sent as X-User-Email for auditing. Defaults to “system” when left blank."
@@ -227,9 +246,15 @@ export function CreateForm({
           onChange={(event) => onAuthorEmailChange(event.currentTarget.value)}
         />
 
+        <Alert color="blue" variant="light" title="This saves a draft">
+          Nothing is sent to customers yet. The version is stored as a draft you can keep
+          editing, and it stays invisible to the notification service until you publish it
+          from the templates list.
+        </Alert>
+
         <Group justify="flex-end" mt="sm">
           <Button type="submit" loading={isSubmitting} disabled={isSubmitting}>
-            Create template
+            {isEdit ? "Save changes" : "Save draft"}
           </Button>
         </Group>
       </Stack>

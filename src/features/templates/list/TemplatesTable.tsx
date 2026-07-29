@@ -25,10 +25,16 @@ interface TemplatesTableProps {
   // Composite `${templateKey}:${version}` of the row currently being archived,
   // or null when no archive is in flight.
   archivingId: string | null;
+  // Same, for the publish in flight.
+  publishingId: string | null;
   onArchive: (row: TemplateSummary) => void;
+  onPublish: (row: TemplateSummary) => void;
 }
 
 const STATUS_COLOR: Record<TemplateStatus, string> = {
+  // Yellow, not grey: a draft is unfinished business someone has to come back
+  // to, not a retired row. Grey would let it blend into the archived ones.
+  DRAFT: "yellow",
   ACTIVE: "green",
   SCHEDULED: "blue",
   ARCHIVED: "gray",
@@ -36,6 +42,10 @@ const STATUS_COLOR: Record<TemplateStatus, string> = {
 
 function formatDate(value: string | null): string {
   return value ? dayjs(value).format("YYYY-MM-DD HH:mm") : "—";
+}
+
+function editDraftHref(row: TemplateSummary): string {
+  return `/templates/${encodeURIComponent(row.templateKey)}/versions/${row.version}/edit`;
 }
 
 function newVersionHref(row: TemplateSummary): string {
@@ -53,9 +63,14 @@ export function TemplatesTable({
   rows,
   isLoading,
   archivingId,
+  publishingId,
   onArchive,
+  onPublish,
 }: TemplatesTableProps) {
   const [pendingArchive, setPendingArchive] = useState<TemplateSummary | null>(
+    null,
+  );
+  const [pendingPublish, setPendingPublish] = useState<TemplateSummary | null>(
     null,
   );
   const [previewRow, setPreviewRow] = useState<TemplateSummary | null>(null);
@@ -64,6 +79,11 @@ export function TemplatesTable({
   function confirmArchive() {
     if (pendingArchive) onArchive(pendingArchive);
     setPendingArchive(null);
+  }
+
+  function confirmPublish() {
+    if (pendingPublish) onPublish(pendingPublish);
+    setPendingPublish(null);
   }
 
   if (isLoading && rows.length === 0) {
@@ -104,7 +124,9 @@ export function TemplatesTable({
             {rows.map((row) => {
               const id = rowId(row);
               const isArchiving = archivingId === id;
+              const isPublishing = publishingId === id;
               const isArchived = row.status === "ARCHIVED";
+              const isDraft = row.status === "DRAFT";
               return (
                 <Table.Tr key={id}>
                   <Table.Td>{row.templateKey}</Table.Td>
@@ -124,30 +146,43 @@ export function TemplatesTable({
                   <Table.Td>{formatDate(row.createdAt)}</Table.Td>
                   <Table.Td>
                     <Group gap="xs" wrap="nowrap">
+                      {/* Every status is previewable now: the row is fetched by
+                          address, so there is no resolution that could skip it
+                          or land on a different version. */}
                       <Tooltip
-                        label={
-                          isArchived
-                            ? "Archived versions cannot be previewed: resolution skips them, so the server would return a different version than this one."
-                            : "Render this version with sample data"
-                        }
+                        label="Render this version with sample data"
                         withArrow
                         multiline
                         w={280}
                       >
-                        {/* span: a disabled button fires no events, so the
-                            tooltip would never show on the case that most needs
-                            explaining. */}
-                        <span>
+                        <Button
+                          size="xs"
+                          variant="light"
+                          onClick={() => setPreviewRow(row)}
+                        >
+                          Preview
+                        </Button>
+                      </Tooltip>
+                      {isDraft ? (
+                        <>
                           <Button
                             size="xs"
                             variant="light"
-                            disabled={isArchived}
-                            onClick={() => setPreviewRow(row)}
+                            component={Link}
+                            to={editDraftHref(row)}
                           >
-                            Preview
+                            Edit
                           </Button>
-                        </span>
-                      </Tooltip>
+                          <Button
+                            size="xs"
+                            color="green"
+                            loading={isPublishing}
+                            onClick={() => setPendingPublish(row)}
+                          >
+                            Publish
+                          </Button>
+                        </>
+                      ) : null}
                       <Button
                         size="xs"
                         variant="light"
@@ -156,7 +191,7 @@ export function TemplatesTable({
                         loading={isArchiving}
                         onClick={() => setPendingArchive(row)}
                       >
-                        Archive
+                        {isDraft ? "Discard" : "Archive"}
                       </Button>
                       <Button
                         size="xs"
@@ -182,15 +217,56 @@ export function TemplatesTable({
         onClose={() => setPreviewRow(null)}
       />
 
+      {/* The one irreversible-in-practice action in this app: from the moment
+          this returns, real customers can receive this template. It gets a
+          confirmation step for that reason and no other. */}
       <Modal
-        opened={pendingArchive !== null}
-        onClose={() => setPendingArchive(null)}
-        title="Archive this version?"
+        opened={pendingPublish !== null}
+        onClose={() => setPendingPublish(null)}
+        title="Publish this version?"
         centered
       >
         <Stack gap="md">
           <Text size="sm">
-            Archiving is terminal — an ARCHIVED version cannot be reactivated.
+            {pendingPublish ? (
+              <>
+                <strong>{pendingPublish.templateKey}</strong> v
+                {pendingPublish.version} goes live immediately, and the
+                notification service will start sending it to real recipients.
+              </>
+            ) : null}
+          </Text>
+          <Text size="sm" c="dimmed">
+            The version currently in effect for this template is closed at the same
+            instant, so there is no overlap and no gap. Preview it first if you have
+            not already — a published version can no longer be edited.
+          </Text>
+          <Group justify="flex-end">
+            <Button variant="default" onClick={() => setPendingPublish(null)}>
+              Cancel
+            </Button>
+            <Button color="green" onClick={confirmPublish}>
+              Publish
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
+
+      <Modal
+        opened={pendingArchive !== null}
+        onClose={() => setPendingArchive(null)}
+        title={
+          pendingArchive?.status === "DRAFT"
+            ? "Discard this draft?"
+            : "Archive this version?"
+        }
+        centered
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            {pendingArchive?.status === "DRAFT"
+              ? "This draft was never published, so nothing was ever sent with it. Discarding is terminal — it cannot be brought back."
+              : "Archiving is terminal — an ARCHIVED version cannot be reactivated."}
             {pendingArchive ? (
               <>
                 {" "}
@@ -204,7 +280,7 @@ export function TemplatesTable({
               Cancel
             </Button>
             <Button color="red" onClick={confirmArchive}>
-              Archive
+              {pendingArchive?.status === "DRAFT" ? "Discard" : "Archive"}
             </Button>
           </Group>
         </Stack>

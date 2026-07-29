@@ -2,19 +2,18 @@
 // construction, and mapping backend VALIDATION_ERROR details back onto form
 // fields. Kept separate from CreatePage/CreateForm so it is unit-testable
 // without React or a DOM.
-import dayjs from "dayjs";
 import type { CreateTemplateRequest } from "../../../api/types";
 
-// Mantine's DateTimePicker (v9) works with naive `YYYY-MM-DD HH:mm:ss`
-// strings, not Date objects. We keep that shape in form state and convert to
-// a proper ISO-8601 instant only when building the request payload.
+// No date field. Creating a template does not schedule it — it produces a DRAFT,
+// and WHEN it applies is decided later, at publish time, by whoever decides to
+// publish it. Asking an author for a date while they are still writing the copy
+// mixed up two different decisions and put a live-now default on the risky one.
 export interface CreateFormValues {
   action: string;
   actionType: string;
   templateKey: string;
   html: string;
   subject: string;
-  effectiveFrom: string | null;
 }
 
 export const EMPTY_CREATE_FORM_VALUES: CreateFormValues = {
@@ -23,7 +22,6 @@ export const EMPTY_CREATE_FORM_VALUES: CreateFormValues = {
   templateKey: "",
   html: "",
   subject: "",
-  effectiveFrom: null,
 };
 
 export type CreateFormFieldErrors = Partial<
@@ -59,6 +57,8 @@ export function validateCreateForm(
  * (`templateKey` from action+actionType, `variables` auto-derived from
  * `html`) — the spec requires `variables` to be left off the request and
  * only used client-side as a preview.
+ *
+ * Never carries effective dates: the backend rejects them here with a 400.
  */
 export function buildCreatePayload(
   values: CreateFormValues,
@@ -75,10 +75,6 @@ export function buildCreatePayload(
   const subject = values.subject.trim();
   if (subject) payload.subject = subject;
 
-  if (values.effectiveFrom) {
-    payload.effectiveFrom = dayjs(values.effectiveFrom).toISOString();
-  }
-
   return payload;
 }
 
@@ -88,7 +84,6 @@ const KNOWN_FIELDS = new Set<keyof CreateFormValues>([
   "templateKey",
   "html",
   "subject",
-  "effectiveFrom",
 ]);
 
 export interface MappedValidationDetails {

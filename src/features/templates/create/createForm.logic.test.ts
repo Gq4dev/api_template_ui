@@ -61,7 +61,6 @@ describe("buildCreatePayload", () => {
       templateKey: " order-created ",
       html: "<p>hi</p>",
       subject: " Your order ",
-      effectiveFrom: null,
     });
     expect(payload).toMatchObject({
       action: "ORDER",
@@ -71,17 +70,18 @@ describe("buildCreatePayload", () => {
     });
   });
 
-  it("converts the naive Mantine datetime string to an ISO-8601 instant", () => {
+  // The backend rejects effective dates on create with a 400, so a payload that
+  // carried them would fail every create. Asserting their absence pins the
+  // split: authoring is not scheduling.
+  it("never carries effective dates — those belong to publish", () => {
     const payload = buildCreatePayload({
       ...EMPTY_CREATE_FORM_VALUES,
       action: "ORDER",
       actionType: "CREATED",
       html: "<p>hi</p>",
-      effectiveFrom: "2026-08-01 10:30:00",
     });
-    expect(payload.effectiveFrom).toMatch(
-      /^2026-08-01T\d{2}:30:00\.000Z$/,
-    );
+    expect(payload).not.toHaveProperty("effectiveFrom");
+    expect(payload).not.toHaveProperty("effectiveTo");
   });
 });
 

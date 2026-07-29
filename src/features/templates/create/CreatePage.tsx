@@ -223,17 +223,23 @@ export function CreatePage() {
       <Container size="sm" py="xl">
         <AppHeader />
         <Title order={2}>Create template</Title>
-        <Alert color="green" title="Version created" mt="md">
+        {/* Blue, not green. A green "success" here would read as "done", and the
+            author's job is not done: nothing reaches a customer until they publish. */}
+        <Alert color="blue" title="Draft saved — not live yet" mt="md">
           <Stack gap="xs">
             <Text>
               <strong>{templateKey}</strong> v{version} — status: {status}
+            </Text>
+            <Text size="sm">
+              The notification service cannot see this version yet. Publish it from the
+              templates list when you are happy with how it renders.
             </Text>
             <Text size="sm" c="dimmed">
               checksum: {checksum}
             </Text>
             <Group mt="sm">
-              <Button component={Link} to="/">
-                Back to list
+              <Button component={Link} to={`/?templateKey=${encodeURIComponent(templateKey)}`}>
+                Review and publish
               </Button>
               <Button variant="default" onClick={handleCreateAnother}>
                 Create another

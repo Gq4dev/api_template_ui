@@ -7,6 +7,7 @@ import type { ApiErrorCode, TemplateStatus } from "../api/types";
 export type UiErrorKind =
   | "VALIDATION_ERROR"
   | "INVALID_STATE_TRANSITION"
+  | "VERSION_NOT_EDITABLE"
   | "TEMPLATE_NOT_FOUND"
   | "OBJECT_NOT_FOUND"
   | "OBJECT_ALREADY_EXISTS"
@@ -27,6 +28,7 @@ export interface UiError {
 const CODE_TO_KIND: Record<ApiErrorCode, UiErrorKind> = {
   VALIDATION_ERROR: "VALIDATION_ERROR",
   INVALID_STATE_TRANSITION: "INVALID_STATE_TRANSITION",
+  VERSION_NOT_EDITABLE: "VERSION_NOT_EDITABLE",
   TEMPLATE_NOT_FOUND: "TEMPLATE_NOT_FOUND",
   OBJECT_NOT_FOUND: "OBJECT_NOT_FOUND",
   OBJECT_ALREADY_EXISTS: "OBJECT_ALREADY_EXISTS",
@@ -36,6 +38,10 @@ const CODE_TO_KIND: Record<ApiErrorCode, UiErrorKind> = {
 const DEFAULT_MESSAGES: Record<UiErrorKind, string> = {
   VALIDATION_ERROR: "Some fields are invalid.",
   INVALID_STATE_TRANSITION: "That action is not allowed in the template's current state.",
+  // Names the way out, because there is one and it is not obvious: the version is
+  // frozen, but authoring a new one costs nothing.
+  VERSION_NOT_EDITABLE:
+    "This version is already published, so its content can no longer be changed. Create a new version instead.",
   TEMPLATE_NOT_FOUND: "That template/version no longer exists.",
   OBJECT_NOT_FOUND: "The referenced object no longer exists.",
   OBJECT_ALREADY_EXISTS: "That object already exists.",

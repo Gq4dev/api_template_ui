@@ -2,12 +2,16 @@
 // Source of truth: api-template/docs/INTEGRATION.md + API.md (verbatim).
 // Instants are ISO-8601 strings over the wire.
 
-// Shared enum — the version lifecycle status. A version takes effect at
-// creation: there is no DRAFT and no publish step. Status is ACTIVE (now/past
-// effectiveFrom) or SCHEDULED (future effectiveFrom); ARCHIVED is terminal.
-export type TemplateStatus = "SCHEDULED" | "ACTIVE" | "ARCHIVED";
+// Shared enum — the version lifecycle status. Authoring and publishing are
+// separate acts: a version is created DRAFT (stored, editable, and NEVER
+// servable), and only reaches customers once published — ACTIVE (now/past
+// effectiveFrom) or SCHEDULED (future). ARCHIVED is terminal.
+export type TemplateStatus = "DRAFT" | "SCHEDULED" | "ACTIVE" | "ARCHIVED";
 
 // ---- Admin: create / commit ----
+// No effective dates: creating never publishes. The backend REJECTS
+// effectiveFrom/effectiveTo here with a 400 rather than ignoring them, so this
+// omission is part of the contract, not a convenience.
 export interface CreateTemplateRequest {
   action: string; // e.g. "ORDER"
   actionType: string; // e.g. "CREATED"
@@ -15,16 +19,31 @@ export interface CreateTemplateRequest {
   html: string; // full HTML body
   subject?: string; // may contain {{placeholders}}
   variables?: string[]; // auto-derived from HTML when omitted
-  effectiveFrom?: string; // ISO-8601; decides SCHEDULED (future) vs ACTIVE (now/past)
-  effectiveTo?: string; // ISO-8601
 }
 
 export interface CreateTemplateResponse {
   templateKey: string;
   version: number;
-  status: TemplateStatus; // ACTIVE or SCHEDULED on creation
+  status: TemplateStatus; // always DRAFT from create/commit/updateDraft
   s3Key: string;
   checksum: string; // e.g. "sha256:ab12..."
+}
+
+// ---- Admin: edit a draft in place ----
+// Same version number, same s3Key, new checksum. This is the authoring "save".
+// 409 VERSION_NOT_EDITABLE once the version is published.
+export interface UpdateDraftRequest {
+  html: string;
+  subject?: string;
+  variables?: string[];
+}
+
+// ---- Admin: publish ----
+// The only call that makes a version reachable by the send path. Every field is
+// optional; an empty body means "live now".
+export interface PublishRequest {
+  effectiveFrom?: string; // ISO-8601; omitted → now (ACTIVE); future → SCHEDULED
+  effectiveTo?: string; // ISO-8601; must be after effectiveFrom
 }
 
 // ---- Admin: upload-url (Mode B) ----
@@ -43,16 +62,14 @@ export interface CommitRequest {
   s3Key: string; // the s3Key returned by upload-url
   variables?: string[];
   subject?: string;
-  effectiveFrom?: string; // ISO-8601; decides SCHEDULED vs ACTIVE
-  effectiveTo?: string; // ISO-8601
 }
 
-// ---- Admin: archive ----
+// ---- Admin: publish / archive ----
 export interface VersionStatusResponse {
   templateKey: string;
   version: number;
   status: TemplateStatus;
-  effectiveFrom: string | null;
+  effectiveFrom: string | null; // null while DRAFT — a draft has no vigency at all
   effectiveTo: string | null;
 }
 
@@ -102,11 +119,16 @@ export interface ResolveResponse {
   effectiveTo: string | null;
 }
 
-// ---- Read: resolve-by-action (with html) ----
+// ---- Read: resolve-by-action, and the addressed single-version read ----
+// Carries action/actionType because the addressed read is reached by
+// templateKey + version, and the caller still needs the action to ask for the
+// variable catalogue or to preview the content it just fetched.
 export interface TemplateContentResponse {
   templateKey: string;
   version: number;
   status: TemplateStatus;
+  action: string;
+  actionType: string;
   subject: string | null;
   variables: string[];
   html: string;
@@ -161,6 +183,9 @@ export type ApiErrorCode =
   | "OBJECT_NOT_FOUND"
   | "OBJECT_ALREADY_EXISTS"
   | "INVALID_STATE_TRANSITION"
+  // 409. Editing content on a version that is already published. Its bytes are
+  // frozen because something may already have been sent with them.
+  | "VERSION_NOT_EDITABLE"
   // 503. The API refuses to store a template it could not validate, so writes
   // fail closed when the validation service is down. Distinct from a network
   // failure: the API answered, it just cannot vouch for the content.
@@ -168,7 +193,7 @@ export type ApiErrorCode =
 
 export interface ApiErrorBody {
   error: ApiErrorCode;
-  details?: string[]; // present on VALIDATION_ERROR
+  details?: string[]; // present on VALIDATION_ERROR and VERSION_NOT_EDITABLE
   from?: TemplateStatus; // present on INVALID_STATE_TRANSITION
   to?: TemplateStatus;
 }

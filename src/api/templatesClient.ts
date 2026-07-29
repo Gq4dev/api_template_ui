@@ -13,6 +13,8 @@ import type {
   UploadUrlRequest,
   UploadUrlResponse,
   CommitRequest,
+  UpdateDraftRequest,
+  PublishRequest,
   VersionStatusResponse,
   ResolveResponse,
   TemplateContentResponse,
@@ -107,6 +109,49 @@ export const templatesApi = {
     });
   },
 
+  // Save a correction to a DRAFT. Same version number, same s3Key — only the
+  // bytes and the checksum move. This is the authoring "save", and it is why a
+  // draft costs one version no matter how many times it is fixed.
+  //
+  // 409 VERSION_NOT_EDITABLE once the version is published: from there the
+  // content is frozen, because something may already have been sent with it.
+  updateDraft(
+    templateKey: string,
+    version: number,
+    payload: UpdateDraftRequest,
+    opts?: { author?: string },
+  ) {
+    return request<CreateTemplateResponse>(
+      `/${templateKey}/versions/${version}`,
+      {
+        method: "PUT",
+        headers: opts?.author ? { "X-User-Email": opts.author } : {},
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+
+  // The one call that puts a template in front of customers. An empty payload
+  // means "live now"; a future effectiveFrom schedules it instead.
+  //
+  // Publishing also auto-closes the previously-open version at this version's
+  // effectiveFrom, so the caller never has to archive the old one by hand.
+  publish(
+    templateKey: string,
+    version: number,
+    payload: PublishRequest = {},
+    opts?: { author?: string },
+  ) {
+    return request<VersionStatusResponse>(
+      `/${templateKey}/versions/${version}/publish`,
+      {
+        method: "POST",
+        headers: opts?.author ? { "X-User-Email": opts.author } : {},
+        body: JSON.stringify(payload),
+      },
+    );
+  },
+
   // archive() intentionally sends no X-User-Email header: per the backend
   // contract (INTEGRATION.md §8) the audit header applies to create/commit only.
   archive(templateKey: string, version: number) {
@@ -124,6 +169,15 @@ export const templatesApi = {
   resolve(templateKey: string, at?: string) {
     const q = at ? `?at=${encodeURIComponent(at)}` : "";
     return request<ResolveResponse>(`/${templateKey}/resolve${q}`);
+  },
+
+  // ONE specific version, with its HTML, addressed rather than resolved.
+  // Works for every status — including DRAFT, which is in effect at no instant
+  // and therefore unreachable by any resolve call.
+  getVersion(templateKey: string, version: number) {
+    return request<TemplateContentResponse>(
+      `/${templateKey}/versions/${version}`,
+    );
   },
 
   // Effective version WITH html, resolved by action + actionType.
