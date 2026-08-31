@@ -1,13 +1,11 @@
 import { Badge, Group, Loader, Stack, Text, Tooltip } from "@mantine/core";
-import type { ContractResponse } from "../../../api/types";
+import type { CatalogueResult } from "../../../preview/protocol";
 
 interface AvailableVariablesProps {
-  contract: ContractResponse | null;
+  catalogue: CatalogueResult | null;
   isLoading: boolean;
   /** True once action + actionType are both filled in. */
   ready: boolean;
-  /** The action was rejected by the renderer — no template or fixture maps to it. */
-  unknownAction: boolean;
 }
 
 // Renders one sample value compactly enough for a tooltip.
@@ -18,16 +16,17 @@ function describe(value: unknown): string {
   return String(value);
 }
 
-// Presentational. The list comes from the renderer's own context, so it names
-// variables the author has not typed yet — which are precisely the ones worth
-// showing. Reading them out of the draft text could only ever repeat back what
-// the author already knows.
+// Presentational. The list comes from the action's PRODUCTION template, not from
+// the draft, so it names variables the author has not typed yet — which are
+// precisely the ones worth showing. Reading them out of the draft text could
+// only ever repeat back what the author already knows.
 export function AvailableVariables({
-  contract,
+  catalogue,
   isLoading,
   ready,
-  unknownAction,
 }: AvailableVariablesProps) {
+  const unknownAction = catalogue != null && !catalogue.known;
+
   return (
     <div>
       <Group gap="xs" mb={4} align="center">
@@ -35,9 +34,9 @@ export function AvailableVariables({
           Available variables
         </Text>
         {isLoading ? <Loader size="xs" /> : null}
-        {contract ? (
+        {catalogue?.template ? (
           <Text size="xs" c="dimmed" ff="monospace">
-            {contract.template}
+            {catalogue.template}
           </Text>
         ) : null}
       </Group>
@@ -48,17 +47,18 @@ export function AvailableVariables({
         </Text>
       ) : unknownAction ? (
         <Text size="sm" c="dimmed">
-          The renderer has no template for this action, so it provides no
-          variables. Check the action and action type — a typo here is the usual
-          cause, and creating the template will be refused for the same reason.
+          The sender has no template for this action, so there is nothing to list.
+          Check the action and action type — a typo here is the usual cause. You
+          can still author and preview the body; the sample data will just come
+          from what you reference yourself.
         </Text>
-      ) : contract && contract.variables.length > 0 ? (
+      ) : catalogue && catalogue.variables.length > 0 ? (
         <Stack gap={6}>
           <Group gap="xs">
-            {contract.variables.map((name) => (
+            {catalogue.variables.map((name) => (
               <Tooltip
                 key={name}
-                label={describe(contract.context[name])}
+                label={describe(catalogue.context[name])}
                 withArrow
                 multiline
                 w={260}
@@ -77,7 +77,7 @@ export function AvailableVariables({
         </Stack>
       ) : (
         <Text size="sm" c="dimmed">
-          No variables reported for this action.
+          This action's template references no variables.
         </Text>
       )}
     </div>

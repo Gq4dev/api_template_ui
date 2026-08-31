@@ -136,45 +136,10 @@ export interface TemplateContentResponse {
   effectiveTo: string | null;
 }
 
-// ---- Preview ----
-// Rendered by the validation service through the PRODUCTION Jinja2 environment,
-// so a field that will arrive empty is shown empty. This is what the recipient
-// gets; it is not a validity check. Publishing is gated by create, which
-// validates strictly and rejects a template with a missing field.
-export interface PreviewRequest {
-  action: string;
-  actionType: string;
-  /** The draft being edited. Omit to render the stored effective version. */
-  html?: string;
-  /** May contain Jinja of its own; comes back rendered. */
-  subject?: string;
-  /** "single" or "multi". Defaults to "single" server-side. */
-  variant?: PreviewVariant;
-  /** Shallow overrides on the sample context, to preview your own wording. */
-  data?: Record<string, unknown>;
-}
-
-export type PreviewVariant = "single" | "multi";
-
-export interface PreviewResponse {
-  action: string;
-  variant: PreviewVariant;
-  subject: string | null;
-  html: string;
-}
-
-// ---- Contract: the variables an action actually provides ----
-// Computed from the renderer's own context rather than parsed out of the
-// template text, so it cannot disagree with what sending will supply.
-export interface ContractResponse {
-  action: string;
-  variant: PreviewVariant;
-  /** The leaf template this action maps to, e.g. "payment_rejected.html.j2". */
-  template: string;
-  variables: string[];
-  /** Sample values, so the UI can show what each variable will look like. */
-  context: Record<string, unknown>;
-}
+// Preview and contract types used to live here. They described two endpoints
+// the API no longer has — it stores templates and decides which version is
+// live, and does not parse, render or validate them. Their replacements are not
+// API types at all: see src/preview/protocol.ts.
 
 // ---- Error envelope (all non-2xx) ----
 export type ApiErrorCode =

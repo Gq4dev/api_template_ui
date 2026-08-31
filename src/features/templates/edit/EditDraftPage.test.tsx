@@ -21,12 +21,34 @@ vi.mock("../../../api/templatesClient", async (importOriginal) => {
       ...actual.templatesApi,
       getVersion: vi.fn(),
       updateDraft: vi.fn(),
-      contract: vi.fn(),
     },
   };
 });
 
+// The preview engine is a Web Worker running Pyodide. jsdom has neither, and
+// these tests are about the edit form's behaviour, not about rendering Jinja —
+// that is covered where the extractor itself is tested.
+vi.mock("../../../preview/client", () => ({
+  fetchCatalogue: vi.fn(),
+  renderDraft: vi.fn(),
+  initPreviewEngine: vi.fn(),
+  PreviewEngineError: class extends Error {},
+  resetPreviewEngine: vi.fn(),
+}));
+
 const { templatesApi } = await import("../../../api/templatesClient");
+const { fetchCatalogue } = await import("../../../preview/client");
+
+/** An action the vendored render core has no template for. */
+const UNKNOWN_ACTION_CATALOGUE = {
+  action: "order.created",
+  variant: "single" as const,
+  template: null,
+  known: false,
+  problem: { kind: "TEMPLATE_NOT_FOUND" as const, message: "no template" },
+  variables: [],
+  context: {},
+};
 
 const DRAFT: TemplateContentResponse = {
   templateKey: "order_created",
@@ -76,7 +98,7 @@ function htmlBody(): HTMLTextAreaElement {
 describe("EditDraftPage", () => {
   it("prefills the form from the stored draft", async () => {
     vi.mocked(templatesApi.getVersion).mockResolvedValue(DRAFT);
-    vi.mocked(templatesApi.contract).mockRejectedValue(new Error("no contract"));
+    vi.mocked(fetchCatalogue).mockResolvedValue(UNKNOWN_ACTION_CATALOGUE);
 
     renderEditPage();
 
@@ -86,7 +108,7 @@ describe("EditDraftPage", () => {
 
   it("saves in place: same version, no new version created", async () => {
     vi.mocked(templatesApi.getVersion).mockResolvedValue(DRAFT);
-    vi.mocked(templatesApi.contract).mockRejectedValue(new Error("no contract"));
+    vi.mocked(fetchCatalogue).mockResolvedValue(UNKNOWN_ACTION_CATALOGUE);
     vi.mocked(templatesApi.updateDraft).mockResolvedValue({
       templateKey: "order_created",
       version: 3,
@@ -131,7 +153,7 @@ describe("EditDraftPage", () => {
     vi.mocked(templatesApi.getVersion)
       .mockResolvedValueOnce(DRAFT)
       .mockResolvedValue({ ...DRAFT, html: "<p>server-changed</p>" });
-    vi.mocked(templatesApi.contract).mockRejectedValue(new Error("no contract"));
+    vi.mocked(fetchCatalogue).mockResolvedValue(UNKNOWN_ACTION_CATALOGUE);
     vi.mocked(templatesApi.updateDraft).mockResolvedValue({
       templateKey: "order_created",
       version: 3,
@@ -161,7 +183,7 @@ describe("EditDraftPage", () => {
       status: "ACTIVE",
       effectiveFrom: "2026-07-01T00:00:00Z",
     });
-    vi.mocked(templatesApi.contract).mockRejectedValue(new Error("no contract"));
+    vi.mocked(fetchCatalogue).mockResolvedValue(UNKNOWN_ACTION_CATALOGUE);
 
     renderEditPage();
 

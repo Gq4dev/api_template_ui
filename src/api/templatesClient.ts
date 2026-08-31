@@ -22,10 +22,6 @@ import type {
   PageResponse,
   ListTemplatesParams,
   ApiErrorBody,
-  PreviewRequest,
-  PreviewResponse,
-  PreviewVariant,
-  ContractResponse,
 } from "./types";
 
 export class ApiError extends Error {
@@ -187,20 +183,8 @@ export const templatesApi = {
     return request<TemplateContentResponse>(`/resolve?${search.toString()}`);
   },
 
-  // --- Authoring aids ---
-  // POST because it carries the draft HTML in the body, NOT because it changes
-  // state: preview stores nothing. Safe to call as often as the author asks.
-  preview(payload: PreviewRequest) {
-    return request<PreviewResponse>("/preview", {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
-  },
-
-  // The variables an author may use, straight from the renderer's context.
-  contract(action: string, actionType: string, variant?: PreviewVariant) {
-    const search = new URLSearchParams({ action, actionType });
-    if (variant) search.set("variant", variant);
-    return request<ContractResponse>(`/contract?${search.toString()}`);
-  },
+  // Rendering and validation are NOT here. The API stores templates and decides
+  // which version is live; it does not parse, render or validate them. Both
+  // authoring aids that used to live at POST /preview and GET /contract now run
+  // in the browser against the vendored render core — see src/preview/.
 };

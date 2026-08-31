@@ -12,7 +12,8 @@ import { useRowPreview } from "../../../queries/useRowPreview";
 import { toUiError } from "../../../lib/errors";
 import { ApiError } from "../../../api/templatesClient";
 import { RenderedEmail } from "../RenderedEmail";
-import type { PreviewVariant, TemplateSummary } from "../../../api/types";
+import type { TemplateSummary } from "../../../api/types";
+import type { PreviewVariant } from "../../../preview/protocol";
 
 interface PreviewModalProps {
   row: TemplateSummary | null;
@@ -41,9 +42,12 @@ export function PreviewModal({
     mutate({ row, variant });
   }, [row, variant, mutate, reset]);
 
-  // Our own guard errors are not ApiErrors, and their message is the whole
-  // point — toUiError would flatten them into a generic network message.
-  const message = preview.error
+  // Three ways this can fail, and they read differently to whoever is looking:
+  // the version could not be fetched (ApiError), the engine could not start, or
+  // the stored template itself does not render. Only the last one is a problem
+  // with the template — which for a STORED version means it should never have
+  // been published.
+  const rejected = preview.error
     ? preview.error instanceof ApiError
       ? toUiError(preview.error).message
       : preview.error.message
@@ -51,6 +55,10 @@ export function PreviewModal({
   const details = preview.error instanceof ApiError
     ? (toUiError(preview.error).fieldDetails ?? [])
     : [];
+
+  const failure = preview.data && !preview.data.ok ? preview.data : null;
+  const rendered = preview.data?.ok ? preview.data : null;
+  const message = rejected ?? (failure ? failure.message : null);
 
   return (
     <Modal
@@ -100,20 +108,29 @@ export function PreviewModal({
         {message ? (
           <Alert color="red" title="Could not render this version">
             <Stack gap={4}>
-              <Text size="sm">{message}</Text>
+              <Text size="sm" ff={failure ? "monospace" : undefined}>
+                {failure?.line != null ? `line ${failure.line}: ` : ""}
+                {message}
+              </Text>
               {details.map((detail) => (
                 <Text key={detail} size="sm" ff="monospace">
                   {detail}
                 </Text>
               ))}
+              {failure ? (
+                <Text size="xs" c="dimmed">
+                  This is a stored version, so it was saved in this state. If it
+                  is published, it is failing to send.
+                </Text>
+              ) : null}
             </Stack>
           </Alert>
         ) : null}
 
-        {preview.data ? (
+        {rendered ? (
           <RenderedEmail
-            subject={preview.data.subject}
-            html={preview.data.html}
+            subject={rendered.subject}
+            html={rendered.html}
             height={560}
           />
         ) : null}

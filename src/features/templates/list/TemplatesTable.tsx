@@ -11,11 +11,8 @@ import {
   Tooltip,
 } from "@mantine/core";
 import dayjs from "dayjs";
-import type {
-  PreviewVariant,
-  TemplateStatus,
-  TemplateSummary,
-} from "../../../api/types";
+import type { TemplateStatus, TemplateSummary } from "../../../api/types";
+import type { PreviewVariant } from "../../../preview/protocol";
 import { PreviewModal } from "./PreviewModal";
 import { rowId } from "./listFilters.logic";
 

@@ -1,6 +1,7 @@
 // Centralized TanStack Query key factory. Keeps cache keys consistent across hooks
 // and avoids hand-typed key arrays scattered through features/.
-import type { ListTemplatesParams, PreviewVariant } from "../api/types";
+import type { ListTemplatesParams } from "../api/types";
+import type { PreviewVariant } from "../preview/protocol";
 
 export const templateKeys = {
   all: ["templates"] as const,
@@ -14,6 +15,8 @@ export const templateKeys = {
     [...templateKeys.all, "version", templateKey, version] as const,
   // Keyed on the action, not the draft: the catalogue is a property of the
   // action, so every template authored for it shares one cache entry.
-  contract: (action: string, actionType: string, variant?: PreviewVariant) =>
-    [...templateKeys.all, "contract", action, actionType, variant ?? "single"] as const,
+  catalogue: (action: string, actionType: string, variant?: PreviewVariant) =>
+    [...templateKeys.all, "catalogue", action, actionType, variant ?? "single"] as const,
+  // Not under `all`: the engine is a property of the build, not of any template.
+  engine: () => ["previewEngine"] as const,
 };

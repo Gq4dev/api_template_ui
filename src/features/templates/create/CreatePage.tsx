@@ -2,12 +2,11 @@ import { type FormEvent, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Alert, Button, Container, Group, Stack, Text, Title } from "@mantine/core";
 import { useCreateTemplate } from "../../../queries/useCreateTemplate";
-import { useContract } from "../../../queries/useContract";
-import { usePreview } from "../../../queries/usePreview";
+import { useVariableCatalogue } from "../../../queries/useVariableCatalogue";
+import { useJinjaPreview } from "../../../queries/useJinjaPreview";
 import { IdempotencyKeyManager } from "../../../lib/idempotency";
 import { toUiError } from "../../../lib/errors";
-import { ApiError } from "../../../api/templatesClient";
-import type { PreviewVariant } from "../../../api/types";
+import type { PreviewVariant } from "../../../preview/protocol";
 import { AppHeader } from "../../../app/AppHeader";
 import { CreateForm } from "./CreateForm";
 import {
@@ -80,32 +79,25 @@ export function CreatePage() {
 
   // --- Authoring aids -----------------------------------------------------
   const [previewVariant, setPreviewVariant] = useState<PreviewVariant>("single");
-  const previewMutation = usePreview();
+  const previewMutation = useJinjaPreview();
 
   const action = values.action.trim();
   const actionType = values.actionType.trim();
-  const contractReady = action !== "" && actionType !== "";
-  const contractQuery = useContract(action, actionType, previewVariant);
+  const catalogueReady = action !== "" && actionType !== "";
+  const catalogueQuery = useVariableCatalogue(action, actionType, previewVariant);
 
-  // A 404 from the contract means the renderer maps no template to this action.
-  // That is worth saying plainly, because creating the template will fail for
-  // exactly the same reason — better to learn it while typing the action than
-  // after writing the whole body.
-  const unknownAction =
-    contractQuery.isError &&
-    contractQuery.error instanceof ApiError &&
-    contractQuery.error.status === 404;
+  const canRender = catalogueReady && values.html.trim() !== "";
 
-  const canRender = contractReady && values.html.trim() !== "";
-
-  // Only offered on an empty body: the example is a starting point, and
-  // silently replacing something an author already typed is never worth it.
+  // Only offered on an empty body, and only for an action that HAS a production
+  // template: the example is a starting point built from that action's own
+  // variables, and silently replacing something an author already typed is
+  // never worth it.
   const canInsertStarter =
-    contractQuery.data != null && values.html.trim() === "";
+    catalogueQuery.data?.known === true && values.html.trim() === "";
 
   function handleInsertStarter() {
-    if (!canInsertStarter || !contractQuery.data) return;
-    handleFieldChange("html", buildStarterTemplate(contractQuery.data.variables));
+    if (!canInsertStarter || !catalogueQuery.data) return;
+    handleFieldChange("html", buildStarterTemplate(catalogueQuery.data.variables));
   }
 
   function handleRenderPreview() {
@@ -126,8 +118,12 @@ export function CreatePage() {
     previewMutation.reset();
   }
 
-  const previewError = previewMutation.isError
-    ? toUiError(previewMutation.error)
+  // A rejected mutation means the ENGINE failed, not the template: a template
+  // problem comes back as a resolved `ok: false` result, which the panel renders
+  // with its line number. Conflating the two would tell an author their HTML is
+  // broken when the real problem is that Pyodide never booted.
+  const previewEngineErrorMessage = previewMutation.isError
+    ? previewMutation.error.message
     : null;
 
   function handleFieldChange<K extends keyof CreateFormValues>(
@@ -262,16 +258,14 @@ export function CreatePage() {
         networkErrorMessage={networkErrorMessage}
         authorEmail={authorEmail}
         isSubmitting={mutation.isPending}
-        contract={contractQuery.data ?? null}
-        isContractLoading={contractQuery.isFetching}
-        contractReady={contractReady}
-        unknownAction={unknownAction}
+        catalogue={catalogueQuery.data ?? null}
+        isCatalogueLoading={catalogueQuery.isFetching}
+        catalogueReady={catalogueReady}
         canInsertStarter={canInsertStarter}
         onInsertStarter={handleInsertStarter}
         previewVariant={previewVariant}
         preview={previewMutation.data ?? null}
-        previewErrorMessage={previewError?.message ?? null}
-        previewErrorDetails={previewError?.fieldDetails ?? []}
+        previewEngineErrorMessage={previewEngineErrorMessage}
         isRendering={previewMutation.isPending}
         canRender={canRender}
         onPreviewVariantChange={handlePreviewVariantChange}

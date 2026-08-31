@@ -10,10 +10,10 @@ import {
   Tooltip,
 } from "@mantine/core";
 import type {
-  ContractResponse,
-  PreviewResponse,
+  CatalogueResult,
   PreviewVariant,
-} from "../../../api/types";
+  RenderResult,
+} from "../../../preview/protocol";
 import { AvailableVariables } from "./AvailableVariables";
 import { PreviewPanel } from "./PreviewPanel";
 import type { CreateFormFieldErrors, CreateFormValues } from "./createForm.logic";
@@ -33,17 +33,15 @@ interface CreateFormProps {
   authorEmail: string;
   isSubmitting: boolean;
   // --- variable catalogue ---
-  contract: ContractResponse | null;
-  isContractLoading: boolean;
-  contractReady: boolean;
-  unknownAction: boolean;
+  catalogue: CatalogueResult | null;
+  isCatalogueLoading: boolean;
+  catalogueReady: boolean;
   // --- preview ---
   canInsertStarter: boolean;
   onInsertStarter: () => void;
   previewVariant: PreviewVariant;
-  preview: PreviewResponse | null;
-  previewErrorMessage: string | null;
-  previewErrorDetails: string[];
+  preview: RenderResult | null;
+  previewEngineErrorMessage: string | null;
   isRendering: boolean;
   canRender: boolean;
   onPreviewVariantChange: (variant: PreviewVariant) => void;
@@ -67,16 +65,14 @@ export function CreateForm({
   networkErrorMessage,
   authorEmail,
   isSubmitting,
-  contract,
-  isContractLoading,
-  contractReady,
-  unknownAction,
+  catalogue,
+  isCatalogueLoading,
+  catalogueReady,
   canInsertStarter,
   onInsertStarter,
   previewVariant,
   preview,
-  previewErrorMessage,
-  previewErrorDetails,
+  previewEngineErrorMessage,
   isRendering,
   canRender,
   onPreviewVariantChange,
@@ -176,7 +172,7 @@ export function CreateForm({
             label={
               canInsertStarter
                 ? "Fills the field with a working skeleton using this action's own variables"
-                : contractReady
+                : catalogueReady
                   ? "Clear the body first — this would overwrite what you wrote"
                   : "Fill in action and action type first"
             }
@@ -213,10 +209,9 @@ export function CreateForm({
         />
 
         <AvailableVariables
-          contract={contract}
-          isLoading={isContractLoading}
-          ready={contractReady}
-          unknownAction={unknownAction}
+          catalogue={catalogue}
+          isLoading={isCatalogueLoading}
+          ready={catalogueReady}
         />
 
         <TextInput
@@ -229,9 +224,8 @@ export function CreateForm({
 
         <PreviewPanel
           variant={previewVariant}
-          preview={preview}
-          errorMessage={previewErrorMessage}
-          errorDetails={previewErrorDetails}
+          result={preview}
+          engineErrorMessage={previewEngineErrorMessage}
           isRendering={isRendering}
           canRender={canRender}
           onVariantChange={onPreviewVariantChange}

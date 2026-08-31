@@ -3,11 +3,10 @@ import { Link, useParams } from "react-router-dom";
 import { Alert, Button, Container, Group, Stack, Text, Title } from "@mantine/core";
 import { useUpdateDraft } from "../../../queries/useUpdateDraft";
 import { useVersionContent } from "../../../queries/useVersionContent";
-import { useContract } from "../../../queries/useContract";
-import { usePreview } from "../../../queries/usePreview";
+import { useVariableCatalogue } from "../../../queries/useVariableCatalogue";
+import { useJinjaPreview } from "../../../queries/useJinjaPreview";
 import { toUiError } from "../../../lib/errors";
-import { ApiError } from "../../../api/templatesClient";
-import type { PreviewVariant } from "../../../api/types";
+import type { PreviewVariant } from "../../../preview/protocol";
 import { AppHeader } from "../../../app/AppHeader";
 import { CreateForm } from "../create/CreateForm";
 import {
@@ -54,7 +53,7 @@ export function EditDraftPage() {
   const [authorEmail, setAuthorEmail] = useState<string>(readStoredAuthorEmail);
   const [previewVariant, setPreviewVariant] = useState<PreviewVariant>("single");
 
-  const previewMutation = usePreview();
+  const previewMutation = useJinjaPreview();
   const loaded = contentQuery.data;
 
   // Seeds the form ONCE per version, when the stored content arrives — not on
@@ -83,20 +82,16 @@ export function EditDraftPage() {
 
   const action = values.action.trim();
   const actionType = values.actionType.trim();
-  const contractReady = action !== "" && actionType !== "";
-  const contractQuery = useContract(action, actionType, previewVariant);
+  const catalogueReady = action !== "" && actionType !== "";
+  const catalogueQuery = useVariableCatalogue(action, actionType, previewVariant);
 
-  const unknownAction =
-    contractQuery.isError &&
-    contractQuery.error instanceof ApiError &&
-    contractQuery.error.status === 404;
-
-  const canRender = contractReady && values.html.trim() !== "";
-  const canInsertStarter = contractQuery.data != null && values.html.trim() === "";
+  const canRender = catalogueReady && values.html.trim() !== "";
+  const canInsertStarter =
+    catalogueQuery.data?.known === true && values.html.trim() === "";
 
   function handleInsertStarter() {
-    if (!canInsertStarter || !contractQuery.data) return;
-    handleFieldChange("html", buildStarterTemplate(contractQuery.data.variables));
+    if (!canInsertStarter || !catalogueQuery.data) return;
+    handleFieldChange("html", buildStarterTemplate(catalogueQuery.data.variables));
   }
 
   function handleRenderPreview() {
@@ -269,21 +264,17 @@ export function EditDraftPage() {
         networkErrorMessage={networkErrorMessage}
         authorEmail={authorEmail}
         isSubmitting={mutation.isPending}
-        contract={contractQuery.data ?? null}
-        isContractLoading={contractQuery.isFetching}
-        contractReady={contractReady}
-        unknownAction={unknownAction}
+        catalogue={catalogueQuery.data ?? null}
+        isCatalogueLoading={catalogueQuery.isFetching}
+        catalogueReady={catalogueReady}
         canInsertStarter={canInsertStarter}
         onInsertStarter={handleInsertStarter}
         previewVariant={previewVariant}
         preview={previewMutation.data ?? null}
-        previewErrorMessage={
-          previewMutation.isError ? toUiError(previewMutation.error).message : null
-        }
-        previewErrorDetails={
-          previewMutation.isError
-            ? (toUiError(previewMutation.error).fieldDetails ?? [])
-            : []
+        // A rejected mutation is the ENGINE failing; a broken template comes
+        // back as a resolved `ok: false` result the panel renders itself.
+        previewEngineErrorMessage={
+          previewMutation.isError ? previewMutation.error.message : null
         }
         isRendering={previewMutation.isPending}
         canRender={canRender}
