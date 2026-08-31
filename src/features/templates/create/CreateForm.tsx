@@ -1,4 +1,4 @@
-import type { FormEvent } from "react";
+import { useRef, type FormEvent } from "react";
 import {
   Alert,
   Button,
@@ -15,7 +15,9 @@ import type {
   RenderResult,
 } from "../../../preview/protocol";
 import { AvailableVariables } from "./AvailableVariables";
+import { InsertBlocks } from "./InsertBlocks";
 import { PreviewPanel } from "./PreviewPanel";
+import { insertSnippet } from "./blockSnippets";
 import type { CreateFormFieldErrors, CreateFormValues } from "./createForm.logic";
 
 interface CreateFormProps {
@@ -82,6 +84,32 @@ export function CreateForm({
   onSubmit,
 }: CreateFormProps) {
   const isEdit = mode === "edit";
+  const htmlRef = useRef<HTMLTextAreaElement>(null);
+
+  /**
+   * Splices a snippet in at the caret and puts the caret back after it.
+   *
+   * The restore is the whole reason this lives here rather than in the page.
+   * The textarea is controlled, so React repaints it from `values.html` on the
+   * next render and the browser drops the selection to the end — insert three
+   * blocks in a row and the third lands nowhere near the second. Setting it
+   * after paint keeps the author where they were working.
+   */
+  function handleInsertBlock(snippet: string) {
+    const el = htmlRef.current;
+    const at = el ? el.selectionStart : values.html.length;
+    const to = el ? el.selectionEnd : at;
+
+    const { text, caret } = insertSnippet(values.html, snippet, at, to);
+    onFieldChange("html", text);
+
+    requestAnimationFrame(() => {
+      const target = htmlRef.current;
+      if (!target) return;
+      target.focus();
+      target.setSelectionRange(caret, caret);
+    });
+  }
 
   return (
     <form onSubmit={onSubmit} noValidate>
@@ -193,7 +221,13 @@ export function CreateForm({
           </Tooltip>
         </Group>
 
+        <InsertBlocks
+          variables={catalogue?.variables ?? []}
+          onInsert={handleInsertBlock}
+        />
+
         <Textarea
+          ref={htmlRef}
           label="HTML body"
           description={
             'Jinja2. Extend the base layout and fill its blocks: {% extends "base.html.j2" %}. Include partials/header.html.j2 and partials/footer.html.j2 for the platform branding — base leaves those blocks empty, so a template without them renders as bare text. Style inline: mail clients discard <style>.'
