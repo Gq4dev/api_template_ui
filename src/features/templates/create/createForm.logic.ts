@@ -126,10 +126,22 @@ export function mapValidationDetails(
  * first try. A generic sample that fails validation teaches the wrong lesson —
  * the author starts by debugging the example instead of writing the mail.
  *
- * The structure is the part worth copying, and it is the part people get wrong:
- * `extends` first, then only the `title` and `content` blocks. Anything written
- * outside a block is silently dropped by Jinja inheritance — no error, no
- * output — which is the single most common way a template comes back blank.
+ * Three things here are structure, not decoration, and each is a way templates
+ * come back wrong:
+ *
+ * 1. `extends` first, and everything inside a block. Anything written outside
+ *    one is silently dropped by Jinja inheritance — no error, no output — which
+ *    is the most common way a template comes back blank.
+ *
+ * 2. The header and footer partials are INCLUDED. base.html.j2 leaves both
+ *    blocks empty, so a template that omits them renders as bare text on white
+ *    with no branding at all. Every bundled template in the sender includes
+ *    them; a starter that did not was teaching authors to produce unbranded
+ *    mail, and they did.
+ *
+ * 3. Styles are inline. Mail clients discard <style> in the head, so a rule
+ *    that is not on the element does not exist. This is why the real templates
+ *    are long: there is no other place to put the styling.
  */
 export function buildStarterTemplate(variables: string[]): string {
   // Prefer scalars a reader recognises. `commerce` and `payer` are objects, so
@@ -141,8 +153,27 @@ export function buildStarterTemplate(variables: string[]): string {
     .slice(0, 3);
   const chosen = picked.length > 0 ? picked : fallback;
 
-  const lines = chosen.length
-    ? chosen.map((name) => `  <p>${name}: {{ ${name} }}</p>`)
+  const greeting = variables.includes("customer_name")
+    ? "  <p>¡Hola {{ customer_name | capitalize_words }}!</p>"
+    : "  <p>¡Hola!</p>";
+
+  const detail = chosen
+    .filter((name) => name !== "customer_name")
+    .map(
+      (name) =>
+        `      <tr><td style="font-family:Arial;font-size:13px;color:#565856;padding:4px 8px;">${name}</td>` +
+        `<td style="font-family:Arial;font-size:13px;color:#1E1248;padding:4px 8px;"><strong>{{ ${name} }}</strong></td></tr>`,
+    );
+
+  const table = detail.length
+    ? [
+        '  <table align="center" cellpadding="0" cellspacing="0"',
+        '         style="margin:0 auto;background-color:#f4f4f2;border-radius:7px;padding:15px;">',
+        "    <tbody>",
+        ...detail,
+        "    </tbody>",
+        "  </table>",
+      ]
     : ["  <p>Escribí el contenido del mail acá.</p>"];
 
   return [
@@ -150,10 +181,24 @@ export function buildStarterTemplate(variables: string[]): string {
     "",
     "{% block title %}Título del mail{% endblock %}",
     "",
+    "{# Branding de la plataforma. Sin estos includes el mail sale sin header ni footer. #}",
+    "{% block header %}",
+    '  {% include "partials/header.html.j2" %}',
+    "{% endblock %}",
+    "",
     "{% block content %}",
-    ...lines,
+    '<div style="padding:15px 30px;font-family:Arial;font-size:13px;color:#565856;text-align:center;">',
+    '  <p style="font-size:18px;font-weight:bold;color:#1E1248;margin:0 0 12px;">Título del mail</p>',
+    greeting,
+    ...table,
     "",
     "  {# Todo lo que esté FUERA de un block no se renderiza. #}",
+    "  {# Los estilos van inline: los clientes de mail descartan el CSS del head. #}",
+    "</div>",
+    "{% endblock %}",
+    "",
+    "{% block footer %}",
+    '  {% include "partials/footer.html.j2" %}',
     "{% endblock %}",
     "",
   ].join("\n");

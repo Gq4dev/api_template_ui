@@ -114,8 +114,10 @@ describe("mapValidationDetails", () => {
 describe("buildStarterTemplate", () => {
   it("uses variables the action actually provides", () => {
     const out = buildStarterTemplate(["customer_name", "link", "commerce"]);
-    expect(out).toContain("{{ customer_name }}");
-    expect(out).toContain("{{ link }}");
+    // Matched as an interpolation, not a literal string: the greeting pipes the
+    // name through capitalize_words, and a filtered variable is still used.
+    expect(out).toMatch(/\{\{\s*customer_name\b/);
+    expect(out).toMatch(/\{\{\s*link\b/);
   });
 
   it("never prints an object variable raw — that would dump a dict into the mail", () => {
@@ -130,8 +132,18 @@ describe("buildStarterTemplate", () => {
     expect(out.startsWith('{% extends "base.html.j2" %}')).toBe(true);
     expect(out).toContain("{% block content %}");
     expect(out).toContain("{% endblock %}");
-    // Only title and content: the client profile refuses header/footer.
-    expect(out).not.toContain("{% block header %}");
-    expect(out).not.toContain("{% block footer %}");
+    // The branding blocks are the point: base.html.j2 leaves header and footer
+    // EMPTY, so a starter without these includes teaches authors to ship mail
+    // with no header, no footer and no styling — which is what happened.
+    expect(out).toContain("{% block header %}");
+    expect(out).toContain('{% include "partials/header.html.j2" %}');
+    expect(out).toContain("{% block footer %}");
+    expect(out).toContain('{% include "partials/footer.html.j2" %}');
+  });
+
+  it("styles inline, because mail clients discard a <style> block", () => {
+    const out = buildStarterTemplate(["customer_name", "final_amount"]);
+    expect(out).toContain("style=");
+    expect(out).not.toContain("<style>");
   });
 });

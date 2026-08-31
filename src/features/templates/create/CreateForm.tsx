@@ -196,7 +196,7 @@ export function CreateForm({
         <Textarea
           label="HTML body"
           description={
-            'Jinja2. Extend the base layout and fill the title and content blocks: {% extends "base.html.j2" %}. Redefining header or footer is refused — branding stays with the platform.'
+            'Jinja2. Extend the base layout and fill its blocks: {% extends "base.html.j2" %}. Include partials/header.html.j2 and partials/footer.html.j2 for the platform branding — base leaves those blocks empty, so a template without them renders as bare text. Style inline: mail clients discard <style>.'
           }
           placeholder={'{% extends "base.html.j2" %}\n{% block content %}...{% endblock %}'}
           required
