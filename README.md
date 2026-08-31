@@ -18,14 +18,23 @@ npm run dev
 Open <http://localhost:5173>. You should get the template list; an empty table means the UI
 reached the API and there is nothing stored yet, while an error banner means it did not.
 
-The API has to be running. From the `api-template` repo root:
+**Authoring and previewing need no backend at all.** Go straight to `/create`: the variable
+catalogue and the preview both run locally, so you can write a template and watch it render
+with nothing else running. The API is only needed to list, save, publish or archive.
+
+To run it, from the `api-template` repo root:
 
 ```bash
-docker compose up -d      # MongoDB (27017) + LocalStack S3 (4566)
-mvn spring-boot:run       # API on http://localhost:8080
+mvn package -DskipTests   # once
+.\run.ps1                 # loads .env, starts the API on http://localhost:8080
 ```
 
 Verify with `curl http://localhost:8080/actuator/health` → `{"status":"UP"}`.
+
+`.env` there supplies `MONGODB_URI` and the AWS credentials — the backend talks to a real
+MongoDB and a real S3 bucket, so treat what you create as real data. Note that
+`docker-compose.yml` in that repo runs the *published image* of the API and does not provide
+storage of its own.
 
 The backend's default `CORS_ALLOWED_ORIGINS` already lists `http://localhost:5173`, so a
 local pair needs no extra configuration.
