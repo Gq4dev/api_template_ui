@@ -24,7 +24,6 @@ import type { PreviewVariant } from "../../../preview/protocol";
 import { RenderedEmail } from "../RenderedEmail";
 import {
   defaultVersion,
-  effectiveStatus,
   findVersion,
   groupByTemplateKey,
   groupsWithMixedActions,
@@ -71,8 +70,6 @@ export function BrowsePage() {
     [groups, templateKey],
   );
   const selected = findVersion(group, version);
-  // Same rule the server will use once it computes status; see effectiveStatus.
-  const selectedStatus = selected ? effectiveStatus(selected) : null;
 
   // Choosing a key implies a version — asking for both before showing anything
   // would make the common case ("what are we sending today") two clicks instead
@@ -152,15 +149,15 @@ export function BrowsePage() {
 
         {selected ? (
           <Group gap="xs" mt="md" align="center">
-            <Badge color={STATUS_COLOR[selectedStatus ?? ""] ?? "gray"} variant="light">
-              {selectedStatus}
+            <Badge color={STATUS_COLOR[selected.status] ?? "gray"} variant="light">
+              {selected.status}
             </Badge>
             <Text size="sm" c="dimmed">
               {selected.action}/{selected.actionType} · v{selected.version} · by{" "}
               {selected.createdBy}
             </Text>
             <Group gap="xs" ml="auto">
-              {selectedStatus === "DRAFT" ? (
+              {selected.status === "DRAFT" ? (
                 <>
                   <Button
                     size="xs"
@@ -184,7 +181,7 @@ export function BrowsePage() {
                   </Button>
                 </>
               ) : null}
-              {selectedStatus !== "ARCHIVED" ? (
+              {selected.status !== "ARCHIVED" ? (
                 <Button
                   size="xs"
                   color="red"

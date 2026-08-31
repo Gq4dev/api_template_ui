@@ -3,42 +3,7 @@
 //
 // No React and no network here so the grouping and the "which version is in
 // effect" rule can be tested directly, which is where the subtle bugs live.
-import type { TemplateStatus, TemplateSummary } from "../../../api/types";
-
-/**
- * The status a version actually has at an instant, computed from its dates.
- *
- * TEMPORARY MIRROR of TemplateVersion.statusAt in the API. Delete this the day
- * the deployed backend computes status itself; until then the alternative is
- * printing labels we know to be false, because a build that reports the STORED
- * status calls every superseded version ACTIVE forever. Six versions of one key
- * all claiming ACTIVE is not a data problem — the vigency chain underneath is
- * correct — it is a stale field being repeated.
- *
- * A second copy of a rule is exactly the shape of drift this repo already got
- * burned by, so it is kept deliberately small, mirrored line for line, and
- * marked for deletion rather than quietly settling in.
- *
- * The rule, from the server:
- *  - DRAFT and ARCHIVED are decisions, not positions on a timeline: report as stored.
- *  - No effectiveFrom means an unpublished shape we do not understand: report as stored.
- *  - Before effectiveFrom it is SCHEDULED.
- *  - effectiveTo is EXCLUSIVE, so a window closing exactly at `at` is already past.
- */
-export function effectiveStatus(
-  row: TemplateSummary,
-  at: Date = new Date(),
-): TemplateStatus {
-  if (row.status === "DRAFT" || row.status === "ARCHIVED") return row.status;
-  if (!row.effectiveFrom) return row.status;
-
-  const instant = at.getTime();
-  if (instant < Date.parse(row.effectiveFrom)) return "SCHEDULED";
-  if (row.effectiveTo != null && instant >= Date.parse(row.effectiveTo)) {
-    return "ARCHIVED";
-  }
-  return "ACTIVE";
-}
+import type { TemplateSummary } from "../../../api/types";
 
 export interface TemplateGroup {
   templateKey: string;
@@ -113,14 +78,11 @@ export function templateKeyOptions(groups: TemplateGroup[]): SelectOption[] {
  * version over another: ACTIVE is what customers get right now, DRAFT is not
  * reachable by the send path at all, ARCHIVED is history.
  */
-export function versionOptions(
-  group: TemplateGroup | null,
-  at: Date = new Date(),
-): SelectOption[] {
+export function versionOptions(group: TemplateGroup | null): SelectOption[] {
   if (!group) return [];
   return group.versions.map((version) => ({
     value: String(version.version),
-    label: `v${version.version} · ${effectiveStatus(version, at)}`,
+    label: `v${version.version} · ${version.status}`,
   }));
 }
 
@@ -131,13 +93,10 @@ export function versionOptions(
  * Falling back to the highest version number keeps the choice deterministic for
  * keys that have no active version (all archived, or nothing published yet).
  */
-export function defaultVersion(
-  group: TemplateGroup | null,
-  at: Date = new Date(),
-): TemplateSummary | null {
+export function defaultVersion(group: TemplateGroup | null): TemplateSummary | null {
   if (!group || group.versions.length === 0) return null;
   return (
-    group.versions.find((version) => effectiveStatus(version, at) === "ACTIVE") ??
+    group.versions.find((version) => version.status === "ACTIVE") ??
     group.versions[0]
   );
 }
