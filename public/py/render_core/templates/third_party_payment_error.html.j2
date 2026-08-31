@@ -1,0 +1,139 @@
+{#- Ported from legacy email/third_party_payment_error.ftl. Consumes commerce, destination_account, beneficiary_email, currency, amount, cuit, recipient, recipient_identifier_type, concept, create_date, urlAdvertisingImg, linkAdvertisingImg. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}{{ msg('siteTitle') }}{% endblock %}
+
+{% block header %}
+    {% include "partials/header.html.j2" %}
+{% endblock %}
+
+{% block content %}
+<div style='display:block;'>
+    <div style='text-align: center;'>
+        <p style='font-family: Arial; font-weight: bold; font-size: 18px; color: #d32f2f;'>Error en Transferencia</p>
+    </div>
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-size:13px; color:#565856; text-align:center'>
+        <p style='font-size:15px;color:#565856;'>
+            Estimado/a:
+        </p>
+        <p>
+            La transferencia de <strong>{{ commerce.fantasy_name or commerce.name }}</strong> hacia <strong>{{ destination_account or beneficiary_email }}</strong> por un monto de <strong>{{ currency }} {{ amount | format_amount }}</strong> ha fallado.
+        </p>
+    </div>
+</div>
+
+<div style='display:block; font-family: Arial;'>
+    <div style='display:block;'>
+        <table width='auto' border='0' align='center' cellpadding='1' cellspacing='1'
+               style='padding:15px; background-color:#f4f4f2; border-radius: 7px;'>
+            <tbody>
+            <tr>
+                <td colspan='2'
+                    style='font-family:Arial;font-size:13px;color:#565856;text-align: center;'>
+                    <strong style='font-size: 15px;'>Detalle de la transferencia</strong>
+                </td>
+            </tr>
+            <tr>
+                <td style='padding: 10px;'>
+                    <img src='{{ resources_base_url }}/elements-img/ico-elements/ico-money.png'>
+                </td>
+                <td style='font-family:Arial;font-size:15px;color:#565856; padding: 10px;'>
+                    <strong>{{ currency }} {{ amount | format_amount }}</strong>
+                </td>
+            </tr>
+            <tr>
+                <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                    <strong>Entidad:</strong>
+                </td>
+                <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                    {{ commerce.fantasy_name or commerce.name }}
+                </td>
+            </tr>
+            <tr>
+                <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                    <strong>Beneficiario:</strong>
+                </td>
+                <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                    {{ destination_account or beneficiary_email }}
+                </td>
+            </tr>
+            {% if beneficiary_email %}
+                <tr>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        <strong>Email del beneficiario:</strong>
+                    </td>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        {{ beneficiary_email }}
+                    </td>
+                </tr>
+            {% endif %}
+            {% if cuit %}
+                <tr>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        <strong>CUIT:</strong>
+                    </td>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        {{ cuit }}
+                    </td>
+                </tr>
+            {% endif %}
+            {% if recipient %}
+                <tr>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        <strong>{{ recipient_identifier_type or "CBU/CVU" }}:</strong>
+                    </td>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        {{ recipient }}
+                    </td>
+                </tr>
+            {% endif %}
+            {% if concept %}
+                <tr>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        <strong>Concepto:</strong>
+                    </td>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        {{ concept }}
+                    </td>
+                </tr>
+            {% endif %}
+            {% if create_date %}
+                <tr>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        <strong>Fecha de solicitud:</strong>
+                    </td>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        {{ create_date | format_date }}
+                    </td>
+                </tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-size:11px; color:#999999; text-align:center'>
+        <p>
+            Por favor, verificá los datos e intentá nuevamente.
+        </p>
+        <p>
+            Si el problema persiste, comunicate con el área de soporte de tu entidad.
+        </p>
+    </div>
+</div>
+
+{% include "partials/commerce-site-enabled-button.html.j2" %}
+<br>
+{% if urlAdvertisingImg %}
+    <div align='center'>
+        <br>
+        <a href="{{ linkAdvertisingImg }}">
+            <img src="{{ urlAdvertisingImg }}" style="width: 100%;">
+        </a>
+    </div>
+{% endif %}
+{% include "partials/payer-service-contact.html.j2" %}
+{% endblock %}
+
+{% block footer %}
+    {% include "partials/footer.html.j2" %}
+{% endblock %}

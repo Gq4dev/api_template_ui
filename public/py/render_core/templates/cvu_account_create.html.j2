@@ -1,0 +1,53 @@
+{#- Ported from legacy email/cvu_account_create.ftl. Consumes name, cvu, alias, cuit. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}{{ msg('siteTitle') }}{% endblock %}
+
+{% block header %}
+    {% include "partials/collector-header.html.j2" %}
+{% endblock %}
+
+{% block content %}
+        <div style="background-color: white;display: block;padding: 10px;text-align: center; font-family: Arial;size: 1em;           color: #565856;">
+            <div style="color: #565857;font-weight: bold;margin-bottom: 4px;">
+                Nueva cuenta CVU
+            </div>
+            <div style="margin-bottom: 20px;margin-top: 20px">
+                <img src='{{ resources_base_url }}/elements-img/ico-elements/ico-info.png'/>
+            </div>
+            <div>
+                !Hola
+                <span style="color: #565857;font-weight: bold;">
+        {{ name }}
+    </span></div>
+            <div style="margin-top: 20px;margin-bottom: 30px">
+                Tu nueva cuenta CVU se ha creado de forma exitosa.
+            </div>
+            <div style="background-color: #F4F4F2;padding: 30px; display: inline-block; border-radius: 8px;">
+                <div style="margin-top: 10px; text-align: start">
+                    <div style="margin-bottom: 4px">Número de cuenta:</div>
+                    <div style="color: #565857;font-weight: bold; margin-bottom: 4px;">
+                        {{ cvu }}
+                    </div>
+                    <br>
+                    <div style="margin-bottom: 4px">Alias:</div>
+                    <div style="color: #565857;font-weight: bold; margin-bottom: 4px;">
+                        {{ alias }}
+                    </div>
+                    <br>
+                    <br>
+                    <div>
+                        Asociado a ************************
+                    </div>
+                    <br>
+                    <div style="margin-bottom: 4px">CUIT:</div>
+                    <div style="color: #565857;font-weight: bold; margin-bottom: 4px;">
+                        {{ cuit }}
+                    </div>
+                    <br>
+                </div>
+            </div>
+        </div>
+        {% include "partials/collector-service-contact.html.j2" %}
+        {% include "partials/collector-footer.html.j2" %}
+{% endblock %}

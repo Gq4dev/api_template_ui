@@ -1,0 +1,218 @@
+{#- Ported from legacy email/payment_remember_without_payment_method.ftl. Consumes payload.payments[] + commerce + properties + payer labels + advertising. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}{{ msg('siteTitle') }}{% endblock %}
+
+{% block header %}
+    {% include "partials/header.html.j2" %}
+{% endblock %}
+
+{% block content %}
+<div style='display:block;'>
+    <div style="text-align: center;">
+        <p style='font-family: Arial; font-weight: bold; font-size: 18px; color: #565856;'>Pago pendiente</p>
+        <img src='{{ resources_base_url }}/elements-img/ico-title/ico-card.png'>
+    </div>
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-size:13px; color:#565856; text-align:center'>
+        <p style='font-size:15px;color:#565856;'>
+            ¡Hola {{ customer_name | capitalize_words }}!</p>
+        {% if (payments | length) <= 1 %}
+            <p>Desde Pago TIC te informamos que {{ commerce.name }} nos indicó que ya se encuentra disponible el siguiente concepto para ser abonado.</p>
+            <p>Si ya lo abonaste, desestimá este correo. Si querés abonarlo, ingresá al link:</p>
+        {% else %}
+            <p>Desde Pago TIC te informamos que {{ commerce.name }} nos indicó que ya se encuentran disponibles los siguientes conceptos para ser abonados.</p>
+            <p>Si ya abonaste, desestimá este correo. Si querés abonar, ingresá a cada link:</p>
+        {% endif %}
+    </div>
+</div>
+<div style='display:block;'>
+    {% if (payments | length) > 1 %}
+        <table width='100%' border='0' align='center' cellpadding='1' cellspacing='1'
+               style='width:100%;padding:15px;background-color:#f4f4f2;border-radius: 7px;'>
+            <tr>
+                {% if properties.externalReferenceUse == "true" %}
+                    <td align='center'
+                        style="font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc">
+                    <strong>
+                        {{ labelExternalReference }}
+                    </strong>
+                    </td>
+                {% elif properties.identificationNumberUse == "true" %}
+                    <td align='center'
+                        style="font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc">
+                    <strong>
+                        {{ labelIdentificationNumber }}
+                    </strong>
+                    </td>
+                {% endif %}
+                <td align="center"
+                    style="font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc">
+                    <strong>Nombre</strong></td>
+                <td align="center"
+                    style="font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc">
+                    <strong>Concepto</strong></td>
+                <td align="center"
+                    style="font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc">
+                    <strong>Importe</strong></td>
+                <td align="center"
+                    style="font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc">
+                    <strong>Vencimiento</strong></td>
+                <td align="center"
+                    style="font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc"></td>
+            </tr>
+            {% for p in payments %}
+                {% if loop.index0 < 10 %}
+                    <tr>
+                        {% if p.payer.external_reference %}
+                            <td align='center'
+                                style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc;'>
+                                <a href="{{ p.form_url }}" target="_blank"
+                                    style="text-decoration: none; color:#565856;">{{ p.payer.external_reference }}
+                                </a>
+                            </td>
+                        {% elif p.payer.identification %}
+                            <td align='center'
+                                style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc;'>
+                            <a href="{{ p.form_url }}" target="_blank"
+                               style="text-decoration: none; color:#565856;">{{ p.payer.identification.number }}
+                            </a>
+                            </td>
+                        {% endif %}
+                        <td align='center'
+                            style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc; padding: 10px'>
+                            <a href="{{ p.form_url }}" target="_blank"
+                               style="text-decoration: none; color:#565856;">{{ p.payer.name | capitalize_words }}</a></td>
+                        <td align='center'
+                            style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc;'>
+                            <table width='100%' border='0' align='center' cellpadding='1' cellspacing='1'
+                                   style='width: 100%;padding: 4px;'>
+                                {% for d in p.details %}
+                                    <tr>
+                                        <td align='center'
+                                            style='font-family:Arial; font-size:11px; color:#565856;'>
+                                            <a href="{{ p.form_url }}" target="_blank"
+                                               style="text-decoration: none; color:#565856;">{{ d.concept_id }}
+                                                - {{ d.concept_description }}</a></td>
+                                    </tr>
+                                {% endfor %}
+                            </table>
+                        </td>
+                        <td align='center'
+                            style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc;'>
+                            <a href="{{ p.form_url }}" target="_blank"
+                               style="text-decoration: none; color:#565856;">{{ p.currency_id }} {{ p.final_amount | format_amount }}</a></td>
+                        <td align='center'
+                            style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc;'>
+                            <a href="{{ p.form_url }}" target="_blank"
+                               style="text-decoration: none; color:#565856;">{{ p.due_date | format_date }}</a></td>
+                        <td align='center'
+                            style='font-family:Arial;font-size:11px;color:#565856;border-bottom:1px solid #cccccc;margin: 5px;'>
+                            <a class="btn"
+                               target="_blank"
+                               style="
+                                    background-color: #E50051;
+                                    color: #ffffff;
+                                    text-decoration: none;
+                                    padding: 5px;
+                                    border-radius: 3px;
+                                    "
+                               href="{{ p.form_url }}">PAGAR
+                            </a>
+                        </td>
+                    </tr>
+                {% endif %}
+            {% endfor %}
+        </table>
+    {% else %}
+        <div style='display:block;'>
+            <a href="{{ payments[0].form_url }}" target="_blank" style="text-decoration: none;">
+                <table width='100%' border='0' align='center' cellpadding='1' cellspacing='1'
+                       style='min-width: 350px; max-width: 95%; padding:15px; background-color:#f4f4f2; border-radius: 7px;'>
+                    <tbody>
+                    <tr>
+                        <td colspan='2'
+                            style='font-family:Arial;font-size:13px;color:#565856;text-align: center;'>
+                            {% for d in payments[0].details %}
+                                <strong style='font-size: 15px;'>{{ d.concept_description | capitalize_words }}</strong>
+                            {% endfor %}
+                            <br>
+                            {% if payments[0].payer.external_reference %}
+                                {{ labelExternalReference }}:  {{ payments[0].payer.external_reference }}
+                            {% elif payments[0].payer.identification %}
+                                {{ labelIdentificationNumber }}:  {{ payments[0].payer.identification.number }}
+                            {% endif %}
+                            <br>
+                           {{ payments[0].payer.name | capitalize_words }}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style='text-align: center;'>
+                            <img style='padding: 20px 0 5px 0;' src='{{ resources_base_url }}/elements-img/ico-elements/ico-money.png'>
+                        </td>
+                        <td style='text-align: center;'>
+                            <img style='padding: 30px 0 5px 0;' src='{{ resources_base_url }}/elements-img/ico-elements/ico-clock.png'>
+                        </td>
+                    </tr>
+                    <tr style='margin-top: 0px;'>
+                        <td style='font-family:Arial;font-size:13px;color:#565856;text-align: center;width: 50%;'>
+                            <p style='margin-top: 0; margin-bottom: 0;''>Importe a Pagar</p>
+                        </td>
+                        <td style='font-family:Arial;font-size:13px;color:#565856;text-align: center;width: 50%;'>
+                            <p style='margin-top: 0; margin-bottom: 0;''>Fecha de Vencimiento</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="font-family:Arial;font-size:15px;color:#565856;text-align: center;width: 50%;">
+                            <p style='margin-top: 0;'>{{ payments[0].currency_id }} {{ payments[0].final_amount | format_amount }}</p>
+                        </td>
+                        <td style="font-family:Arial;font-size:15px;color:#565856;text-align: center;width: 50%;">
+                            <p style='margin-top: 0;'>{{ payments[0].due_date | format_date }}</p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td colspan="2"
+                            style="font-family:Arial;font-size:13px;color:#333333; text-align: center;">
+                            <a class="btn" target="_blank" style="
+                                   margin-top: 80px;
+                                   background-color:#E50051;
+                                   color:#ffffff;
+                                   text-decoration:none;
+                                   padding: 5px 7px;
+                                   border-radius:3px;
+                                    "
+                               href="{{ payments[0].form_url }}">PAGAR
+                            </a>
+                        </td>
+                    </tr>
+                    </tbody>
+                </table>
+            </a>
+        </div>
+    {% endif %}
+    {% if (payments | length) > 10 %}
+        <p align='center'>
+            <a href="https://billetera.paypertic.com/"
+               style='background-color:#E50051;color:#ffffff;text-decoration:none;padding:5px 8px;border-radius:3px;font-size: 14px;'>
+                Ver listado completo de pagos
+            </a>
+        </p>
+    {% endif %}
+</div>
+{% include "partials/payment-options.html.j2" %}
+{% include "partials/commerce-site-enabled-button.html.j2" %}
+{% include "partials/automatic-debit-enabled-info.html.j2" %}
+{% include "partials/wallet-invitation.html.j2" %}
+{% if urlAdvertisingImg %}
+    <div align='center' >
+        <br>
+        <a href="{{ linkAdvertisingImg }}">
+            <img src="{{ urlAdvertisingImg }}" style="width: 100%;">
+        </a>
+    </div>
+{% endif %}
+{% include "partials/payer-service-contact.html.j2" %}
+{% endblock %}
+
+{% block footer %}
+    {% include "partials/footer.html.j2" %}
+{% endblock %}

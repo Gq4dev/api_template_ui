@@ -1,0 +1,33 @@
+{#- Ported from legacy email/elements/payer-information-setting.ftl -#}
+{#-
+   NOTE: This partial only performs {% set %} assignments (no markup output).
+   In FreeMarker, <#include> shares the caller namespace so these vars leak
+   into the including template. Jinja2 include is scope-isolated: variables set
+   here are NOT visible in the parent by default. Consumers should either
+   {% include %} + reference within a shared scope via {% set %}/namespace, or
+   preferably compute labelExternalReference / labelIdentificationNumber in the
+   parent template. Kept as a faithful port for reference.
+-#}
+{% if properties.labelExternalReference %}
+    {% set labelExternalReference = properties.labelExternalReference %}
+{% elif commerce.type == 'CLUB' %}
+    {% set labelExternalReference = "Nro de Socio" %}
+{% elif commerce.type == 'ONG' %}
+    {% set labelExternalReference = "Nro de Oferente" %}
+{% elif commerce.type == 'EMPRESA' %}
+    {% set labelExternalReference = "Nro de Cliente" %}
+{% elif commerce.type == 'EDUCATIVA' %}
+    {% set labelExternalReference = "Nro de Alumno" %}
+{% elif commerce.type == 'GOBIERNO' %}
+    {% set labelExternalReference = "Identificador de la tasa" %}
+{% elif commerce.type == 'CONSORCIO' %}
+    {% set labelExternalReference = "Nro de unidad funcional" %}
+{% else %}
+    {% set labelExternalReference = "Nro de Pagador" %}
+{% endif %}
+
+{% if properties.labelIdentificationNumber %}
+    {% set labelIdentificationNumber = properties.labelIdentificationNumber %}
+{% else %}
+    {% set labelIdentificationNumber = "DNI/CUIT" %}
+{% endif %}

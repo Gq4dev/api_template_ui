@@ -1,0 +1,162 @@
+{#- Ported from legacy email/subscription_rejected.ftl. Consumes subscriptions[], commerce, customer_name, urlAdvertisingImg, linkAdvertisingImg. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}{{ msg('siteTitle') }}{% endblock %}
+
+{% block header %}
+<div style='display:block;margin:0 auto; padding-top: 20px;width:100%'>
+    <img style='margin-left:32px; margin-bottom:7px;' src='{{ resources_base_url }}/img/logo-pagotic.svg' alt=''>
+    {% if commerce.sourceLogo %}
+        <img style='margin-right:32px; width:100%; margin-top:-15px; float:right; display:none'
+             src='{{ commerce.sourceLogo }}' height='70' alt=''>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block content %}
+<div style='display:block;padding:15px 30px; font-family:Arial; font-size:22px; color:#fff; text-align:left; background:#1E1248 url({{ resources_base_url }}/img/billetes.png) right center no-repeat; border-radius:10px 10px 0 0;'>
+    Solicitud Rechazada
+</div>
+<div style='display:block;background-color:#f0fbfe;'>
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-size:12px; color:#4b4a4a; text-align:justify'>
+        <p style='font-family:Arial; font-size:14px; color:#1E1248; padding-top:5px'>¡Hola<span
+                    style='font-family:Arial; font-size:14px; color:#1E1248;'> {{ customer_name | capitalize_words }}</span>!
+        </p>
+        {% if (subscriptions | length) <= 1 %}
+            <p>Te informamos que <strong>{{ commerce.name }}</strong> ha rechazado tu solicitud de suscripción</p>
+            <br>
+            <p>Podés ver el detalle a continuación:</p>
+        {% else %}
+            <p>Te informamos que <strong>{{ commerce.name }}</strong> ha rechazado tus solicitudes de suscripción</p>
+            <br>
+            <p>Podés ver los detalles a continuación:</p>
+        {% endif %}
+        <div style='display:block;background-color:#f6fcfe;padding: 5px;border: 1px solid #d8f2fa;'>
+            {% if 1 < (subscriptions | length) %}
+                <table width='100%' border='0' align='center' cellpadding='1' cellspacing='1'
+                       style='width: 100%;padding:3px;border: 1px solid #fff;'>
+                    <tr>
+                        <td align='center' bgcolor='#F0C318'
+                            style='font-family:Arial; font-size:10px; color:#4b4a4a;border-bottom: 1px solid #fff;'>
+                            N° Pagador:
+                        </td>
+                        <td align='center' bgcolor='#F0C318'
+                            style='font-family:Arial; font-size:10px; color:#4b4a4a;border-bottom: 1px solid #fff;'>
+                            Apellido y Nombre
+                        </td>
+                        <td align='center' bgcolor='#F0C318'
+                            style='font-family:Arial; font-size:10px; color:#4b4a4a;border-bottom: 1px solid #fff;'>
+                            Concepto
+                        </td>
+                        <td align='center' bgcolor='#F0C318'
+                            style='font-family:Arial; font-size:10px; color:#4b4a4a;border-bottom: 1px solid #fff;'>
+                            Medio de pago
+                        </td>
+                        {% if s.type != "adhesion" %}
+                            <td align='center' bgcolor='#F0C318'
+                                style='font-family:Arial; font-size:10px; color:#4b4a4a;border-bottom: 1px solid #fff;'>
+                                Monto
+                            </td>
+                        {% endif %}
+                        <td align='center' bgcolor='#F0C318'
+                            style='font-family:Arial; font-size:10px; color:#4b4a4a;border-bottom: 1px solid #fff;'>
+                            Motivo
+                        </td>
+                    </tr>
+                    {% for s in subscriptions %}
+                        <tr>
+                            <td align='center'
+                                style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #fff;'>{% if s.payer.external_reference %}{{ s.payer.external_reference }}{% endif %}</td>
+                            <td align='center'
+                                style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #fff;'>{{ customer_name | capitalize_words }}</td>
+                            <td align='center'
+                                style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #fff;'>{{ s.detail.concept_id }}
+                                - {{ s.detail.concept_description }}</td>
+                            <td align='center'
+                                style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #d8f2fa;'>{{ s.payment_method.media_payment_detail }}
+                                - XXXXXXXX{{ s.payment_method.last_four_digits }}</td>
+                            {% if s.type != "adhesion" %}
+                                <td align='center'
+                                    style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #fff;'>
+                                    $ {{ (s.amount | format_amount) if s.amount else '-' }}</td>
+                            {% endif %}
+                            <td align='center'
+                                style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #fff;'>{{ s.status_detail }}</td>
+                        </tr>
+                    {% endfor %}
+                </table>
+            {% else %}
+                <div style='display:block;padding: 10px;border: 1px solid #fff;'>
+                    <table width='100%' border='0' align='center' cellpadding='1' cellspacing='1'
+                           style='width: 100%;padding: 10px;'>
+                        <tr>
+                            <td width='10'><img src='{{ resources_base_url }}/img/li1.png' width='5' height='9'
+                                                alt=''></img></td>
+                            <td style='font-family:Arial; font-size:11px; color:#333333;'><strong>Nº
+                                    pagador: {% if subscriptions[0].payer.external_reference %}{{ subscriptions[0].payer.external_reference }}{% endif %}</strong>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td width='10'><img src='{{ resources_base_url }}/img/li1.png' width='5' height='9'
+                                                alt=''></img></td>
+                            <td style='font-family:Arial; font-size:11px; color:#333333;'><strong>Apellido y
+                                    Nombre: {{ customer_name | capitalize_words }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td width='10'><img src='{{ resources_base_url }}/img/li1.png' width='5' height='9'
+                                                alt=''></img></td>
+                            <td style='font-family:Arial; font-size:11px; color:#333333;'><strong>ID
+                                    Concepto: {{ subscriptions[0].detail.concept_id }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td width='10'><img src='{{ resources_base_url }}/img/li1.png' width='5' height='9'
+                                                alt=''></img></td>
+                            <td style='font-family:Arial; font-size:11px; color:#333333;'>
+                                <strong>Concepto: {{ subscriptions[0].detail.concept_description }}</strong></td>
+                        </tr>
+                        {% if subscriptions[0].amount and subscriptions[0].amount > 0 %}
+                            <tr>
+                                <td width='10'><img src='{{ resources_base_url }}/img/li1.png' width='5' height='9'
+                                                    alt=''></img></td>
+                                <td style='font-family:Arial; font-size:11px; color:#333333;'><strong>Importe:
+                                        $ {{ subscriptions[0].amount | format_amount }}</strong></td>
+                            </tr>
+                        {% endif %}
+                        <tr>
+                            <td width='10'><img src='{{ resources_base_url }}/img/li1.png' width='5' height='9'
+                                                alt=''></img></td>
+                            <td style='font-family:Arial; font-size:11px; color:#333333;'><strong>Medio de
+                                    Pago: {{ subscriptions[0].payment_method.media_payment_detail }} -
+                                    XXXXXXXX{{ subscriptions[0].payment_method.last_four_digits }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td width='10'><img src='{{ resources_base_url }}/img/li1.png' width='5' height='9'
+                                                alt=''></img></td>
+                            <td style='font-family:Arial; font-size:11px; color:#333333;'>
+                                <strong>Motivo: {{ subscriptions[0].status_detail }}</strong></td>
+                        </tr>
+                    </table>
+                </div>
+            {% endif %}
+        </div>
+
+        <p>Si querés reiterar la solicitud o conocer el motivo del rechazo, podés comunicarte directamente con {{ commerce.name }}.</p>
+        <p>Muchas gracias por confiar en nosotros</p>
+        <p>Atentamente,
+            <br>
+            <span style='font-size:14px; text-align:left'>El equipo Pago TIC</span></p>
+    </div>
+    {% if urlAdvertisingImg %}
+        <div align='center' style='padding: 30px;'>
+            <br>
+            <a href="{{ linkAdvertisingImg }}">
+                <img src="{{ urlAdvertisingImg }}" style="width: 100%;">
+            </a>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block footer %}
+    {% include "partials/footer.html.j2" %}
+{% endblock %}

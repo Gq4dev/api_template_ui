@@ -1,0 +1,59 @@
+{#- Ported from legacy email/distribution_voucher.ftl. Consumes distribution.collector.name,
+    detail.amount, detail.destination.value, detail.destination.name, detail.last_update_date,
+    detail.processor.external_id. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}{{ msg('siteTitle') }}{% endblock %}
+
+{% block header %}
+    {% include "partials/collector-header.html.j2" %}
+{% endblock %}
+
+{% block content %}
+        <div style="background-color: white;display: block;padding: 10px;text-align: center; font-family: Arial;size: 1em;           color: #565856;">
+            <div style="color: #565857;font-weight: bold;margin-bottom: 4px;">
+                Transferencia Realizada
+            </div>
+            <div style="margin-bottom: 20px;margin-top: 20px">
+                <img src='{{ resources_base_url }}/elements-img/ico-title/ico-success.png'/>
+            </div>
+            <div>
+                ¡Hola!
+            </div>
+            <div style="margin-top: 10px;margin-bottom: 40px">
+                Recibiste una transferencia por un pago hecho a {{ distribution.collector.name }}
+            </div>
+            <div style="background-color: #F4F4F2;padding: 30px; display: inline-block; border-radius: 8px;">
+                <div style="margin-top: 10px">
+                    <img src='{{ resources_base_url }}/elements-img/ico-elements/ico-money.png'/>
+                </div>
+                <div style="margin-top: 10px">ARS {{ detail.amount | format_amount }}</div>
+                <div style="margin-top: 20px; text-align: start">
+                    <div style="margin-bottom: 15px"> Destino: ************************</div>
+                    <div style="margin-bottom: 4px">CBU/CVU:</div>
+                    <div style="color: #565857;font-weight: bold; margin-bottom: 20px;">
+                        {{ detail.destination.value }}
+                    </div>
+                    <div style="margin-bottom: 4px">Nombre: <div style="color: #565857;font-weight: bold; margin-bottom: 20px;">
+                            {{ detail.destination.name }}
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 4px">Fecha y hora de transferencia: <div style="color: #565857;font-weight: bold; margin-bottom: 20px;">
+                            {{ detail.last_update_date | format_date }}
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 4px">Numero de transaccion: <div style="color: #565857;font-weight: bold; margin-bottom: 20px;">
+                            {{ detail.processor.external_id }}
+                        </div>
+                    </div>
+                    <div style="margin-bottom: 4px">Monto: <div style="color: #565857;font-weight: bold; margin-bottom: 20px;">
+                            ARS {{ detail.amount | format_amount }}
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+        {% include "partials/collector-service-contact.html.j2" %}
+        {% include "partials/collector-footer.html.j2" %}
+{% endblock %}

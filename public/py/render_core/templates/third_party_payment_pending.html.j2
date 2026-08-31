@@ -1,0 +1,152 @@
+{#- Ported from legacy email/third_party_payment_pending.ftl. Consumes commerce, id, created_by, create_date, currency, amount, destination_account, cuit, recipient, recipient_identifier_type, concept, urlAdvertisingImg, linkAdvertisingImg. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}{{ msg('siteTitle') }}{% endblock %}
+
+{% block header %}
+    {% include "partials/header.html.j2" %}
+{% endblock %}
+
+{% block content %}
+<div style='display:block;'>
+    <div style='text-align: center;'>
+        <p style='font-family: Arial; font-weight: bold; font-size: 18px; color: #1E1248;'>Nuevo Pago Pendiente de Aprobación</p>
+    </div>
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-size:13px; color:#565856; text-align:center'>
+        <p style='font-size:15px;color:#565856;'>
+            ¡Hola!
+        </p>
+        <p>
+            Se ha generado un nuevo pago a tercero pendiente de aprobación en <strong>{{ commerce.fantasy_name or commerce.name }}</strong>.
+        </p>
+    </div>
+</div>
+
+<div style='display:block; font-family: Arial;'>
+    <div style='display:block;'>
+        <table width='auto' border='0' align='center' cellpadding='1' cellspacing='1'
+               style='padding:15px; background-color:#f4f4f2; border-radius: 7px;'>
+            <tbody>
+            <tr>
+                <td colspan='2'
+                    style='font-family:Arial;font-size:13px;color:#565856;text-align: center;'>
+                    <strong style='font-size: 15px;'>Información del pago pendiente</strong>
+                </td>
+            </tr>
+            <tr>
+                <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                    <strong>Id:</strong>
+                </td>
+                <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                    {{ id }}
+                </td>
+            </tr>
+            {% if created_by %}
+                <tr>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        <strong>Solicitante:</strong>
+                    </td>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        {{ created_by | capitalize_words }}
+                    </td>
+                </tr>
+            {% endif %}
+            {% if create_date %}
+                <tr>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        <strong>Fecha de solicitud:</strong>
+                    </td>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        {{ create_date | format_date }}
+                    </td>
+                </tr>
+            {% endif %}
+            <tr>
+                <td style='padding: 10px;'>
+                    <img src='{{ resources_base_url }}/elements-img/ico-elements/ico-money.png'>
+                </td>
+                <td style='font-family:Arial;font-size:15px;color:#565856; padding: 10px;'>
+                    <strong>{{ currency }} {{ amount | format_amount }}</strong>
+                </td>
+            </tr>
+            <tr>
+                <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                    <strong>Destinatario:</strong>
+                </td>
+                <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                    {{ destination_account }}
+                </td>
+            </tr>
+            {% if cuit %}
+                <tr>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        <strong>CUIT:</strong>
+                    </td>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        {{ cuit }}
+                    </td>
+                </tr>
+            {% endif %}
+            {% if recipient %}
+                <tr>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        <strong>{{ recipient_identifier_type or "CBU/CVU" }}:</strong>
+                    </td>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        {{ recipient }}
+                    </td>
+                </tr>
+            {% endif %}
+            {% if concept %}
+                <tr>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        <strong>Concepto:</strong>
+                    </td>
+                    <td style='font-family:Arial;font-size:13px;color:#565856;padding: 10px;'>
+                        {{ concept }}
+                    </td>
+                </tr>
+            {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-size:13px; color:#565856; text-align:center'>
+        <p>
+            Podés revisar y aprobar este pago ingresando al sistema desde el siguiente enlace:
+        </p>
+        <p align='center' style='padding: 15px 0;'>
+            <a style='font-family:Arial;font-size:14px;background-color:#1E1248;color:#ffffff;text-decoration:none;padding:12px 25px;border-radius:5px;display:inline-block;'
+               href='https://entidad.paypertic.com/'
+               target='_blank'>
+                Acceder al Front Office
+            </a>
+        </p>
+    </div>
+
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-size:11px; color:#999999; text-align:center'>
+        <p>
+            Este mensaje fue enviado automáticamente por el sistema de Pago TIC.
+        </p>
+        <p>
+            Si no correspondés a un usuario con rol de aprobación, por favor ignorá este aviso.
+        </p>
+    </div>
+</div>
+
+{% include "partials/commerce-site-enabled-button.html.j2" %}
+<br>
+{% if urlAdvertisingImg %}
+    <div align='center'>
+        <br>
+        <a href="{{ linkAdvertisingImg }}">
+            <img src="{{ urlAdvertisingImg }}" style="width: 100%;">
+        </a>
+    </div>
+{% endif %}
+{% include "partials/payer-service-contact.html.j2" %}
+{% endblock %}
+
+{% block footer %}
+    {% include "partials/footer.html.j2" %}
+{% endblock %}

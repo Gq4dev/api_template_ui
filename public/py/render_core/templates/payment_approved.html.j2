@@ -1,0 +1,135 @@
+{#- Ported from legacy email/payment_approved.ftl. Consumes payload.payments[] + commerce. -#}
+{% extends "base.html.j2" %}
+
+{% set single = (payments | length) <= 1 %}
+{% set commerce_name = commerce.fantasy_name or commerce.name %}
+
+{% block title %}Pago Aprobado{% endblock %}
+
+{% block header %}
+    {% include "partials/header.html.j2" %}
+{% endblock %}
+
+{% block content %}
+<div style='display:block;'>
+    <div style='text-align: center;'>
+        <p style='font-family: Arial; font-weight: bold; font-size: 18px; color: #1E1248;'>
+            {{ 'Pago Aprobado' if single else 'Pagos Aprobados' }}
+        </p>
+        <img src='{{ resources_base_url }}/elements-img/ico-title/ico-success.png' alt='ok'>
+    </div>
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-size:13px; color:#565856; text-align:center'>
+        <p style='font-size:15px;color:#565856;'>¡Hola {{ customer_name | capitalize_words }}!</p>
+        {% if single %}
+        <p>Desde Pago TIC te informamos que hemos procesado exitosamente el pago para <strong>{{ commerce_name }}</strong><br>
+            <br>Recordá que esta transacción puede aparecer en tu resumen como Pago TIC o Pay per TIC.<br><br>
+            Te compartimos el detalle del pago:</p>
+        {% else %}
+        <p>Te informamos que tus pagos a <strong>{{ commerce_name }}</strong> se procesaron exitosamente.<br>
+            <br>Recordá que pueden aparecer en tu resumen como Pago TIC o Pay per TIC S.A<br><br>
+            Te compartimos el detalle de los pagos:</p>
+        {% endif %}
+    </div>
+</div>
+
+<div style='display:block; font-family: Arial;'>
+{% if single and payments %}
+    {% set p = payments[0] %}
+    <table width='auto' border='0' align='center' cellpadding='1' cellspacing='1'
+           style='padding:15px; background-color:#f4f4f2; border-radius: 7px; margin: 0 auto;'>
+        <tbody>
+        <tr>
+            <td colspan='100' style='font-family:Arial;font-size:13px;color:#565856;text-align: center;'>
+                {% for d in (p.details or []) %}
+                    <strong style='font-size: 15px;'>{% if not loop.first %} - {% endif %}{{ d.concept_description | capitalize_words }}</strong>
+                {% endfor %}
+                <br>
+                {% if p.payer.external_reference %}
+                    Referencia: {{ p.payer.external_reference }}
+                {% elif p.payer.identification.number %}
+                    Identificación: {{ p.payer.identification.number }}
+                {% endif %}
+                <br>
+                {{ customer_name | capitalize_words }}
+                <br>
+                Fecha de pago: {{ p.paid_date | format_date }}
+            </td>
+        </tr>
+        <tr>
+            <td style='text-align: center;'>
+                <img style='padding: 20px 0 5px 0;' src='{{ resources_base_url }}/elements-img/ico-elements/ico-money.png' alt=''>
+            </td>
+            {% if p.payment_methods %}
+            <td style='text-align: center; font-family:Arial;font-size:13px;color:#565856;'>
+                {{ p.payment_methods[0].media_payment_detail }}
+            </td>
+            {% endif %}
+        </tr>
+        <tr>
+            <td style='font-family:Arial;font-size:15px;color:#565856;text-align: center;width: 50%;'>
+                <p style='margin-top: 0;'>{{ p.currency_id }} {{ p.final_amount | format_amount }}</p>
+            </td>
+            {% if p.payment_methods and p.payment_methods[0].last_four_digits %}
+            <td style='font-family:Arial;font-size:15px;color:#565856;text-align: center;width: 50%;'>
+                <p style='margin-top: 0;'>**** {{ p.payment_methods[0].last_four_digits }}</p>
+            </td>
+            {% endif %}
+        </tr>
+        </tbody>
+    </table>
+
+    <div align='center' style='padding:10px;'>
+        {% if p.id %}
+        <div align='center' style='display: inline-block; vertical-align: top;'>
+            <img src='https://servicios.paypertic.com/formularios/v2/comprobantes/QR/{{ p.id }}' height='170px' alt='QR'>
+        </div>
+        {% endif %}
+        <div align='center'
+             style='font-family:Arial; font-size:11px; text-align:center; display:inline-block; color:#4b4a4a; padding:15px; background-color:#f4f4f2; border-radius:7px; width:auto; vertical-align: top;'>
+            <p style='font-family:Arial;font-size:11px'>
+                Este correo es recibo suficiente de tu pago<br>
+                siempre que incluya el c&oacute;digo QR.<br>
+                Pod&eacute;s acceder al comprobante en l&iacute;nea escaneando el c&oacute;digo<br>
+                o haciendo click en el siguiente bot&oacute;n.<br><br><br>
+                {% if p.form_url %}
+                <a style='font-family:Arial;font-size:11px;background-color:#E50051;color:#ffffff;text-decoration:none;padding:5px 8px;border-radius:3px'
+                   href='{{ p.form_url }}' target='_blank'>VER COMPROBANTE</a>
+                {% endif %}
+            </p>
+        </div>
+    </div>
+{% else %}
+    <table width='100%' border='0' align='center' cellpadding='1' cellspacing='1'
+           style='width:100%;padding:15px;background-color:#f4f4f2;border-radius: 7px;'>
+        <tr>
+            <td align='center' style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'><strong>Nombre</strong></td>
+            <td align='center' style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'><strong>Concepto</strong></td>
+            <td align='center' style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'><strong>Fecha de pago</strong></td>
+            <td align='center' style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'><strong>Medio de pago</strong></td>
+            <td align='center' style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'><strong>Monto</strong></td>
+            <td align='center' style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'></td>
+        </tr>
+        {% for p in payments %}
+        <tr>
+            <td align='center' style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc; padding: 10px'>{{ customer_name | capitalize_words }}</td>
+            <td align='center' style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc'>
+                {% for d in (p.details or []) %}{% if not loop.first %} - {% endif %}{{ d.concept_description }}{% endfor %}
+            </td>
+            <td align='center' style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc'>{{ p.paid_date | format_date }}</td>
+            <td align='center' style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc'>
+                {{ p.payment_methods[0].media_payment_detail }}{% if p.payment_methods[0].last_four_digits %} **** {{ p.payment_methods[0].last_four_digits }}{% endif %}
+            </td>
+            <td align='center' style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc'>{{ p.currency_id }} {{ p.final_amount | format_amount }}</td>
+            <td align='center' style='font-family:Arial;font-size:11px;color:#565856;border-bottom:1px solid #cccccc;margin: 5px'>
+                {% if p.form_url %}<a target="_blank" href='{{ p.form_url }}' style="background-color: #1E1248; color: #ffffff; text-decoration: none; padding: 5px; border-radius: 3px;">Ver Comprobante</a>{% endif %}
+            </td>
+        </tr>
+        {% endfor %}
+    </table>
+{% endif %}
+</div>
+{% endblock %}
+
+{% block footer %}
+    {% include "partials/footer.html.j2" %}
+{% endblock %}

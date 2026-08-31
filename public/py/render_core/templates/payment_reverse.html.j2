@@ -1,0 +1,76 @@
+{#- Ported from legacy email/payment_reverse.ftl. Consumes payload.payments[0] (payer + details). Collector-facing. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}{{ msg('siteTitle') }}{% endblock %}
+
+{% block header %}
+    {% include "partials/collector-header.html.j2" %}
+{% endblock %}
+
+{% block content %}
+<div style='display:block;'>
+    <div style="text-align: center;">
+        <p style='font-family: Arial; font-weight: bold; font-size: 18px; color: #565856;'>Reversi&oacute;n Recibida</p>
+        <img src='{{ resources_base_url }}/elements-img/ico-title/ico-rejected.png'>
+    </div>
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-weight: bold;font-size:13px; color:#565856; text-align:center'>
+        <p style='font-size:15px;color:#565856;'>
+            Estimado cliente:</p>
+        <p>Nos comunicamos para informar que recibimos la reversión de un pago en el día de la fecha.
+            <br>
+            El detalle de la transacci&oacute;n es el siguiente:
+        </p>
+
+    </div>
+</div>
+<div style='display:block; margin-bottom:30px;'>
+    <div style='display:block;'>
+        <table width='auto' border='0' align='center' cellpadding='1' cellspacing='1'
+               style='width:100%; padding:15px; background-color:#f4f4f2; border-radius: 7px;'>
+            <tbody>
+            <tr>
+                <td style='font-family:Arial; font-size:13px;color:#565856;text-align: center;'>
+                    <p>
+                        {% set payer = payments[0].payer %}
+                        Pagador: {{ payer.name }}
+                        {% if payer.external_reference %}
+                            <br>
+                            Referencia: {{ payer.external_reference }}
+                        {% endif %}
+                        <br>
+                        Fecha de pago: {{ payments[0].paid_date | format_date }}
+                        <br>
+                        Concepto:
+                            {% for detail in payments[0].details %}
+                                {{ detail.concept_description }}
+                                <br>
+                            {% endfor %}
+                    </p>
+                </td>
+            </tr>
+            <tr>
+                <td style='text-align: center;'>
+                    <img style='padding: 30px 0 5px 0;'
+                         src='{{ resources_base_url }}/elements-img/ico-elements/ico-money.png'>
+                </td>
+            </tr>
+            <tr>
+                <td style="font-family:Arial;font-size:15px;color:#565856;text-align: center;width: 50%;">
+                    <p style='margin-top: 0;'>{% if payments[0].currency_id %}{{ payments[0].currency_id }} {% else %}ARS {% endif %}{{ payments[0].final_amount | format_amount }}</p>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-weight: bold;font-size:13px; color:#565856; text-align:center'>
+        <p>
+            Sugerimos contactarse con el pagador a la brevedad, así como computar la reversión del pago dentro de su sistema contable.
+        </p>
+    </div>
+</div>
+{% include "partials/collector-service-contact.html.j2" %}
+{% endblock %}
+
+{% block footer %}
+    {% include "partials/collector-footer.html.j2" %}
+{% endblock %}

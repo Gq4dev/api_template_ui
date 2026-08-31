@@ -1,0 +1,60 @@
+{#- Ported from legacy email/withdrawal_create.ftl. Collector-facing. Consumes commerce, id, request_user, request_date, collector_id, currency_id, amount. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}{{ msg('siteTitle') }}{% endblock %}
+
+{% block header %}
+    {% include "partials/collector-header.html.j2" %}
+{% endblock %}
+
+{% block content %}
+<div style='display:block;'>
+    <div style="text-align: center;">
+        <p style='font-family: Arial; font-weight: bold; font-size: 18px; color: #565856;'>Solicitud Recibida</p>
+        <img src='{{ resources_base_url }}/elements-img/ico-title/ico-envelope.png'>
+    </div>
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-weight: bold;font-size:13px; color:#565856; text-align:center'>
+        <p style='font-size:15px;color:#565856;'>
+            Estimados:</p>
+        <p>Recibimos la solicitud de retiro de parte de <strong>{{ commerce.name }}</strong>
+            <br>
+            Los datos de la solicitud son los siguientes:
+        </p>
+
+    </div>
+</div>
+<div style='display:block; margin-bottom:30px;'>
+    <div style='display:block;'>
+        <table width='100%' border='0' align='center' cellpadding='1' cellspacing='1'
+               style='width:100%; padding:15px; background-color:#f4f4f2; border-radius: 7px;'>
+            <tbody>
+            <tr>
+                <td style='font-family:Arial; font-size:13px;color:#565856;text-align: center;'>
+                    <p><span style="font-weight: bold">ID del Retiro: {{ id }}</span>
+                        <br>
+                        Usuario solicitante: {{ request_user }}
+                        <br>
+                        {{ request_date | format_date }}
+                        <br>
+                        Signature: {{ collector_id }}
+                    </p>
+                </td>
+            </tr>
+            <tr>
+                <td style='text-align: center;'>
+                    <img style='padding: 20px 0 5px 0;'
+                         src='{{ resources_base_url }}/elements-img/ico-elements/ico-money.png'>
+                </td>
+            </tr>
+            <tr>
+                <td style="font-family:Arial;font-size:15px;color:#565856;text-align: center;width: 50%;">
+                    <p style='margin-top: 0;'>{% if currency_id %}{{ currency_id }} {% else %}ARS {% endif %}{{ amount | format_amount }}</p>
+                </td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+{% include "partials/collector-service-contact.html.j2" %}
+{% include "partials/collector-footer.html.j2" %}
+{% endblock %}

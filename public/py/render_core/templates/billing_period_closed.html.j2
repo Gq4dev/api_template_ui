@@ -1,0 +1,58 @@
+{#- Ported from legacy email/billing_period_closed.ftl. Consumes period, date, user, bills_quantity. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}Período de facturación cerrado{% endblock %}
+
+{% block content %}
+<div style='display:block;padding:15px 30px; font-family:Arial; font-size:22px; color:#fff; text-align:left; background:#1E1248 url("{{ resources_base_url }}/img/bg-eml-top-ppt.png") right center no-repeat; border-radius:10px 10px 0 0;'>
+    Período de facturación cerrado
+</div>
+<div style='display:block;background-color:#f0fbfe;'>
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-size:12px; color:#4b4a4a; text-align:justify'>
+        <div style="margin-top: 10px;margin-bottom: 30px">
+            El siguiente período de facturación se cerró:
+        </div>
+        <div style='display:block;background-color:#f6fcfe;padding: 5px;border: 1px solid #d8f2fa;'>
+            <div style="background-color: #F4F4F2;padding: 30px; display: inline-block; border-radius: 8px;width:95%;">
+                <div style="text-align: start; font-weight: bold; font-size: 14px;">
+                    <div style="margin-bottom: 4px">Periodo:</div>
+                    <div style="color: #565857; margin-bottom: 20px;">
+                        {# Formatea 202504 -> ABRIL 2025 #}
+                        {% if period %}
+                        {% set periodo = period | string %}
+                        {% set anio = periodo[0:4] %}
+                        {% set mes_numero = periodo[4:6] | int %}
+                        {% set meses = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
+                        "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"] %}
+                        {{ meses[mes_numero - 1] }} {{ anio }}
+                        {% endif %}
+                    </div>
+                </div>
+                <div style="text-align: start; font-weight: bold; font-size: 14px;">
+                    <div style="margin-bottom: 4px">Fecha de cierre:</div>
+                    <div style="color: #565857; margin-bottom: 20px;">
+                        {{ date | format_date }}
+                    </div>
+                </div>
+                <div style="text-align: start; font-weight: bold; font-size: 14px;">
+                    <div style="margin-bottom: 4px">Administrador:</div>
+                    <div style="color: #565857; margin-bottom: 20px;">
+                        {{ user }}
+                    </div>
+                </div>
+                <div style="text-align: start; font-weight: bold; font-size: 14px;">
+                    <div style="margin-bottom: 4px">Monto facturado:</div>
+                    <div style="color: #565857; margin-bottom: 20px;">
+                        {{ bills_quantity }}
+                    </div>
+                </div>
+            </div>
+            <p>Muchas gracias por confiar en nosotros</p>
+            <p>Atentamente,
+                <br>
+                <span style='font-size:14px; text-align:left'>El equipo Pago TIC</span>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,55 @@
+{#- Ported from legacy email/scheduled_distribution_success.ftl. In the legacy template the banner + body
+    markup live inside the 'header' section, so they are rendered into the header block here.
+    Consumes collector.name, destination.type, destination.value, currency_id, totalAmount, status, id. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}{{ msg('siteTitle') }}{% endblock %}
+
+{% block header %}
+{% include "partials/header.html.j2" %}
+<div style='display:block;padding:15px 30px; font-family:Arial; font-size:22px; color:#fff; text-align:left; background:#1E1248 url({{ resources_base_url }}/img/bg-eml-top-ppt.png) right center no-repeat; border-radius:10px 10px 0 0;'>
+    Distribución programada exitosamente
+</div>
+<div style='display:block;background-color:#f0fbfe;'>
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-size:12px; color:#4b4a4a; text-align:justify'>
+        <p style='font-family:Arial; font-size:14px; color:#1E1248; padding-top:5px'>Estimado/a<span style='font-family:Arial; font-size:14px; color:#1E1248;'> {{ collector.name }}</span>:
+        </p>
+            <div style="margin-top: 10px;margin-bottom: 30px">
+                La siguiente distribución fue programada con éxito, se informará el estado de las transferencias cuando se realicen.
+            </div>
+        <div style='display:block;background-color:#f6fcfe;padding: 5px;border: 1px solid #d8f2fa;'>
+            <div style="background-color: #F4F4F2;padding: 30px; display: inline-block; border-radius: 8px;width:95%;">
+                <div style="text-align: start; font-weight: bold; font-size: 14px;">
+                    <div style="margin-bottom: 4px">Entidad:</div>
+                    <div style="color: #565857; margin-bottom: 20px;">
+                        {{ collector.name }}
+                    </div>
+                    <div style="margin-bottom: 4px">Destino:</div>
+                    <div style="color: #565857; margin-bottom: 20px;">
+                        {{ destination.type }} : {{ destination.value }}
+                    </div>
+                    <div style="margin-bottom: 4px">Monto Total:</div>
+                    <div style="color: #565857;font-weight: bold; margin-bottom: 20px;">
+                        <div style="margin-top: 10px">{% if currency_id %}{{ currency_id }} {% else %}ARS {% endif %} {{ totalAmount | format_amount }}</div>
+                    </div>
+                    <div style="margin-bottom: 4px">Estado:</div>
+                    <div style="color: #565857;font-weight: bold; margin-bottom: 20px;">
+                        {{ status }}
+                    </div>
+                    <div style="margin-bottom: 4px">Id de distribución:</div>
+                    <div style="color: #565857;font-weight: bold; margin-bottom: 4px;">
+                        {{ id }}
+                    </div>
+                </div>
+            </div>
+            <p>Muchas gracias por confiar en nosotros</p>
+            <p>Atentamente,
+                <br>
+                <span style='font-size:14px; text-align:left'>El equipo Pago TIC</span></p>
+        </div>
+    </div>
+{% endblock %}
+
+{% block footer %}
+        {% include "partials/footer.html.j2" %}
+{% endblock %}

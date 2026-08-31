@@ -1,0 +1,201 @@
+{#- Ported from legacy email/debit_payment_retry_error.ftl. Consumes payload.payments[] + commerce. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}{{ msg('siteTitle') }}{% endblock %}
+
+{% block header %}
+    {% include "partials/header.html.j2" %}
+    <div style='display:block;padding:15px 30px; font-family:Arial; font-size:22px; color:#fff; text-align:left; background:#1E1248 url({{ resources_base_url }}/img/billetes.png) right center no-repeat; border-radius:10px 10px 0 0;'>
+        El reintento de pago por debito automático ha fallado.
+    </div>
+{% endblock %}
+
+{% block content %}
+<div style='display:block;background-color:#f0fbfe;'>
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-size:12px; color:#4b4a4a; text-align:justify'>
+        <p style='font-family:Arial; font-size:14px; color:#1E1248; padding-top:5px'>¡Hola!</p>
+        {% if (payments | length) <= 1 %}
+            <p>Desde Pago TIC lamentamos informarte que el reintento de tu pago por debito automático a <strong>{{ commerce.fantasy_name or commerce.name }}</strong> ha fallado.
+                <br>
+                <br>
+                Te sugerimos reintentar con otro medio de pago.
+                <br>
+                Si el problema persiste, podés comunicarte con nosotros al 0810-220-5555 o <strong>con tu medio de pago en caso que el problema persista.</strong>
+                <br>
+                <br>
+                Te compartimos el detalle del pago:
+            </p>
+        {% else %}
+            <p>Desde Pago TIC lamentamos informarte que el reintento de tu pago por debito automático a <strong>{{ commerce.fantasy_name or commerce.name }}</strong> ha fallado.
+                <br>
+                <br>
+                Te sugerimos reintentar con otro medio de pago.
+                <br>
+                Si el problema persiste, podés comunicarte con nosotros al 0810-220-5555.
+                <br>
+                <br>
+                Te compartimos el detalle de cada transacci&oacute;n:
+            </p>
+        {% endif %}
+        <div style='display:block;background-color:#f6fcfe;padding: 5px;border: 1px solid #d8f2fa;'>
+            {% if (payments | length) > 1 %}
+                <table width='100%' border='0' align='center' cellpadding='1' cellspacing='1'
+                       style='width: 100%;padding: 4px;'>
+                    <tr>
+                        <td align='center' bgcolor='#F0FBFE'
+                            style='font-family:Arial; font-size:10px; color:#4b4a4a;border-bottom: 1px solid #fff;'>
+                            Apellido y Nombre
+                        </td>
+                        <td align='center' bgcolor='#F0FBFE'
+                            style='font-family:Arial; font-size:10px; color:#4b4a4a;border-bottom: 1px solid #fff;'>
+                            Concepto
+                        </td>
+                        <td align='center' bgcolor='#F0FBFE'
+                            style='font-family:Arial; font-size:10px; color:#4b4a4a;border-bottom: 1px solid #fff;'>
+                            Fecha
+                        </td>
+                        <td align='center' bgcolor='#F0FBFE'
+                            style='font-family:Arial; font-size:10px; color:#4b4a4a;border-bottom: 1px solid #fff;'>
+                            Medio de pago
+                        </td>
+                        <td align='center' bgcolor='#F0FBFE'
+                            style='font-family:Arial; font-size:10px; color:#4b4a4a;border-bottom: 1px solid #fff;'>
+                            Monto
+                        </td>
+                        <td align='center' bgcolor='#F0FBFE'
+                            style='font-family:Arial; font-size:10px; color:#4b4a4a;border-bottom: 1px solid #fff;'>
+                            Motivo
+                        </td>
+                    </tr>
+                    {% for p in payments %}
+                        <tr>
+                            <td align='center'
+                                style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #fff;'>{{ p.payer.name }}</td>
+                            <td align='center'
+                                style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #d8f2fa;'>
+                                <table width='100%' border='0' align='center' cellpadding='1' cellspacing='1'
+                                       style='width: 100%;padding: 4px;'>
+                                    {% for d in p.details %}
+                                        <tr>
+                                            <td align='center'
+                                                style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #d8f2fa;'>{{ d.concept_id }}
+                                            - {{ d.concept_description }}</td>
+                                            <td align='center'
+                                                style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #d8f2fa;'>{{ p.currency_id }} {{ d.amount | format_amount }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </table>
+                            </td>
+                            <td align='center'
+                                style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #fff;'>{{ p.request_date | format_date }}</td>
+                            <td align='center'
+                                style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #d8f2fa;'>
+                                {% if payment_methods %}
+                                    {% for pm in p.payment_methods %}
+                                        {{ pm.media_payment_detail }}</br>
+                                        XXXXXXXX{{ pm.last_four_digits }}</br>
+                                    {% endfor %}
+                                {% else %}
+                                    Sin medio de pago
+                                {% endif %}
+
+                            </td>
+                            <td align='center'
+                                style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #fff;'>{{ p.currency_id }} {{ p.final_amount | format_amount }}</td>
+                            <td align='center'
+                                style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #fff;'>{{ p.status_detail }}</td>
+                        </tr>
+                    {% endfor %}
+                </table>
+            {% else %}
+                <div style='display:block;background-color:#f4f4f2;padding: 10px;border: 1px solid #fff;'>
+                    <table width='100%' border='0' align='center' cellpadding='1' cellspacing='1'
+                           style='width: 100%;padding: 10px;'>
+                        <tr>
+                            <td width='10'><img src='{{ resources_base_url }}/img/li1.png' width='5' height='9'
+                                                alt=''></img></td>
+                            <td style='font-family:Arial; font-size:11px; color:#333333;'><strong>Nº
+                                    pagador: {% if payments[0].payer.external_reference %}{{ payments[0].payer.external_reference }}{% endif %}</strong>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td width='10'><img src='{{ resources_base_url }}/img/li1.png' width='5' height='9'
+                                                alt=''></img></td>
+                            <td style='font-family:Arial; font-size:11px; color:#333333;'>
+                                <strong>Concepto:</strong></td>
+                        </tr>
+                        <tr>
+                            <td width='10'></td>
+                            <td aling='center' style='font-family:Arial; font-size:11px; color:#333333;'>
+                                <table width='100%' border='0' align='center' cellpadding='1' cellspacing='1'
+                                       style='width: 100%;padding: 4px;'>
+                                    {% for d in payments[0].details %}
+                                        <tr>
+                                            <td align='left'
+                                                style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #d8f2fa;'>{{ d.concept_id }}
+                                            - {{ d.concept_description }}</td>
+                                            <td align='right'
+                                                style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #d8f2fa;'>{{ payments[0].currency_id }} {{ d.amount | format_amount }}</td>
+                                        </tr>
+                                    {% endfor %}
+                                </table>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td width='10'><img src='{{ resources_base_url }}/img/li1.png' width='5' height='9'
+                                                alt=''></img></td>
+                            <td style='font-family:Arial; font-size:11px; color:#333333;'><strong>Importe:
+                                    $ {{ payments[0].final_amount | format_amount }}</strong></td>
+                        </tr>
+                        <tr>
+                            <td width='10'><img src='{{ resources_base_url }}/img/li1.png' width='5' height='9'
+                                                alt=''></img></td>
+                            <td style='font-family:Arial; font-size:11px; color:#333333;'><strong>Medio de
+                                    Pago:</strong></td>
+                        </tr>
+                        <tr>
+                            <td width='10'></td>
+                            <td aling='center' style='font-family:Arial; font-size:11px; color:#333333;'>
+                                <table width='100%' border='0' align='center' cellpadding='1' cellspacing='1'
+                                       style='width: 100%;padding: 4px;'>
+                                    {% if payments[0].payment_methods %}
+                                        {% for pm in payments[0].payment_methods %}
+                                            <tr>
+                                                <td align='left'
+                                                    style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #d8f2fa;'>{{ pm.media_payment_detail }}
+                                                - XXXXXXXX{{ pm.last_four_digits }}</td>
+                                            </tr>
+                                        {% endfor %}
+                                    {% else %}
+                                        <tr>
+                                            <td align='left'
+                                                style='font-family:Arial; font-size:11px; color:#4b4a4a;border-bottom: 1px solid #d8f2fa;'>
+                                                Sin medio de pago
+                                            </td>
+                                        </tr>
+                                    {% endif %}
+                                </table>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td width='10'><img src='{{ resources_base_url }}/img/li1.png' width='5' height='9'
+                                                alt=''></img></td>
+                            <td style='font-family:Arial; font-size:11px; color:#333333;'>
+                                <strong>Motivo:{{ payments[0].error }}</strong></td>
+                        </tr>
+                    </table>
+                </div>
+            {% endif %}
+        </div>
+        <p>Muchas gracias por confiar en nosotros</p>
+        <p>Atentamente,
+            <br>
+            <span style='font-size:14px; text-align:left'>El equipo Pago TIC</span>
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block footer %}
+    {% include "partials/footer.html.j2" %}
+{% endblock %}

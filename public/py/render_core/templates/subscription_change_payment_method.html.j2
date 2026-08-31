@@ -1,0 +1,247 @@
+{#- Ported from legacy email/subscription_change_payment_method.ftl. Standalone content fragment (no layout in source); consumes customer_name. -#}
+{% extends "base.html.j2" %}
+
+{% block content %}
+<div class='item-notification bg-review' style='padding: 3em'>
+    <div class='item-notification-title' style='text-align: center;'>
+        <h4 style='font-size: 2em;'>Modificación del medio de pago</h4>
+    </div>
+    <div style="display: flex; justify-content: center; align-items: center;">
+        <img src="{{ resources_base_url }}/elements-img/ico-title/ico-edit.png" />
+    </div>
+    <p style='font-family:Arial; font-size:1.4em; color:#000; text-align: center; margin-top: 2em;'>
+        ¡Hola <strong>{{ customer_name | capitalize_words }}</strong>!</p>
+    <p style='font-family:Arial; font-size:1.4em; color:#000; text-align: center;'>
+        Te compartimos el paso a paso para cambiar tu medio de pago.
+    </p>
+    <div style='width: 60%;
+                margin: 0 auto;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                padding: 2em;
+                background-color: #e5e5e5;
+                border-radius: 7px;'>
+        <div style='width: 100%;
+                    display: flex;
+                    flex-direction: column;
+                    justify-content: center;
+                    align-items: center;'>
+            <div style='width: 100%;
+                        min-height: 3em;
+                        display: flex;
+                        flex-direction: row;
+                        justify-content: flex-start;
+                        align-items: center;
+                        margin-top: 1em;
+                        overflow-wrap: break-word;
+                        font-family: Roboto;
+                        font-size: 1.3em;
+                        color: #000;'>
+                <div style='width: 5%;
+    			            height: 100%;
+    			            display: flex;
+                            flex-direction: column;
+                            justify-content: flex-start;
+                            align-items: center;'>
+                    <div style='width: 1.5em;
+                                height: 1.5em;
+                                line-height: 1em;
+                                text-align: center;
+                                padding: .25em;
+                                font-size: 1em;
+                                background-color: #1E1248;
+                                color: #fff;
+                                border-radius: 50%;
+                                -moz-border-radius: 50%;
+                                -webkit-border-radius: 50%;'>1</div>
+                </div>
+                <div style='width: 95%; margin-left: 1em;'>
+                    Ingresá a tu <strong>billetera electrónica</strong> con tu mail y contraseña.
+                </div>
+            </div>
+            <div style='width: 100%;
+                        min-height: 3em;
+                        display: flex;
+                        flex-direction: row;
+                        justify-content: flex-start;
+                        align-items: center;
+                        margin-top: 1em;
+                        overflow-wrap: break-word;
+                        font-family: Roboto;
+                        font-size: 1.3em;
+                        color: #000;'>
+                <a style='background-color: #1E1248;
+                          color: white;
+                          padding: 10px 20px;
+                          border-radius: 4px;
+                          text-align: center;
+                          text-decoration: none;
+                          text-transform: uppercase;
+                          display: inline-block;
+                          font-size: 16px;
+                          margin: 2px 2px;
+                          cursor: pointer;' href="https://billetera.paypertic.com" role="button" target="_blank">
+                    ir a la billetera
+                </a>
+            </div>
+            <div style='width: 100%;
+                        min-height: 3em;
+                        display: block;
+                        margin-top: 1em;
+                        overflow-wrap: break-word;
+                        font-family: Roboto;
+                        font-size: 1.3em;
+                        color: #000;'>
+                Recordá que el mail debe ser el mismo con el que te suscribiste. Si nunca generaste tu contraseña,
+                hacé click en <strong><i>"Si sos usuario y aún no tenés contraseña hacé click aquí"</i></strong>
+                para recibir los pasos a seguir en tu casilla.
+            </div>
+            <div style='width: 100%;
+                        min-height: 3em;
+                        display: flex;
+                        flex-direction: row;
+                        justify-content: flex-start;
+                        align-items: center;
+                        margin-top: 1em;
+                        overflow-wrap: break-word;
+                        font-family: Roboto;
+                        font-size: 1.3em;
+                        color: #000;'>
+                <div style='width: 5%;
+    			            height: 100%;
+    			            display: flex;
+                            flex-direction: column;
+                            justify-content: flex-start;
+                            align-items: center;'>
+                    <div style='width: 1.5em;
+                                height: 1.5em;
+                                line-height: 1em;
+                                text-align: center;
+                                padding: .25em;
+                                font-size: 1em;
+                                background-color: #1E1248;
+                                color: #fff;
+                                border-radius: 50%;
+                                -moz-border-radius: 50%;
+                                -webkit-border-radius: 50%;'>2</div>
+                </div>
+                <div style='width: 95%; margin-left: 1em;'>
+                    Una vez dentro de tu billetera, hacé click en <strong><i>Mis Suscripciones</i></strong>. Allí
+                    podrás
+                    ver todos los conceptos adheridos al pago automático. Tené en cuenta que por defecto verás tus
+                    suscripciones activas. Podés ver todas seleccionando esa opción en el desplegable de estados.
+                </div>
+            </div>
+            <div style='width: 100%;
+                        min-height: 3em;
+                        display: flex;
+                        flex-direction: row;
+                        justify-content: flex-start;
+                        align-items: center;
+                        margin-top: 1em;
+                        overflow-wrap: break-word;
+                        font-family: Roboto;
+                        font-size: 1.3em;
+                        color: #000;'>
+                <div style='width: 5%;
+    			            height: 100%;
+    			            display: flex;
+                            flex-direction: column;
+                            justify-content: flex-start;
+                            align-items: center;'>
+                    <div style='width: 1.5em;
+                                height: 1.5em;
+                                line-height: 1em;
+                                text-align: center;
+                                padding: .25em;
+                                font-size: 1em;
+                                background-color: #1E1248;
+                                color: #fff;
+                                border-radius: 50%;
+                                -moz-border-radius: 50%;
+                                -webkit-border-radius: 50%;'>3</div>
+                </div>
+                <div style='width: 95%; margin-left: 1em;'>
+                    Seleccioná la suscripción cuyo medio de pago querés modificar haciendo click sobre el ícono con
+                    forma de lápiz y seleccioná la opción <strong><i>Cambiar medio de pago</i></strong>.
+                </div>
+            </div>
+            <div style='width: 100%;
+                        min-height: 3em;
+                        display: flex;
+                        flex-direction: row;
+                        justify-content: flex-start;
+                        align-items: center;
+                        margin-top: 1em;
+                        overflow-wrap: break-word;
+                        font-family: Roboto;
+                        font-size: 1.3em;
+                        color: #000;'>
+                <div style='width: 5%;
+    			            height: 100%;
+    			            display: flex;
+                            flex-direction: column;
+                            justify-content: flex-start;
+                            align-items: center;'>
+                    <div style='width: 1.5em;
+                                height: 1.5em;
+                                line-height: 1em;
+                                text-align: center;
+                                padding: .25em;
+                                font-size: 1em;
+                                background-color: #1E1248;
+                                color: #fff;
+                                border-radius: 50%;
+                                -moz-border-radius: 50%;
+                                -webkit-border-radius: 50%;'>4</div>
+                </div>
+                <div style='width: 95%; margin-left: 1em;'>
+                    Ingresá la información solicitada y hacé click en <strong><i>Aceptar</i></strong>, vas a ver un
+                    mensaje
+                    confirmando la operación exitosa.
+                </div>
+            </div>
+            <div style='width: 100%;
+                        font-family:Arial;
+                        font-size:1.7em;
+                        color:#000;
+                        text-align: left;
+                        margin-top: 1em;
+                        font-weight: 700;'>
+                ¡Listo!
+            </div>
+        </div>
+    </div>
+    <div style='width: 60%;
+                margin: 0 auto;
+                padding: 2em;
+                display: flex;
+ 	            flex-direction: column;
+   	            justify-content: center;
+   	            align-items: center;
+                font-family: Roboto;
+                font-size: 1.2em;
+                text-align: left;
+                color: #000;'>
+        <p style='font-family:Arial; font-size:1.4em; color:#000;'>
+            <strong>Información importante sobre el estado de las suscripciones:</strong>
+        </p>
+        <p style='font-family:Arial; font-size:1.2em; color:#000;'>
+            Cualquier modificación sobre la suscripción tendrá impacto a partir del mes siguiente.
+            En el caso de querer modificar un pago durante el mes en curso, siempre que el pago
+            correspondiente a la suscripción se encuentre <strong>en estado Emitido, podés modificarlo desde la
+                sección Mis Pagos</strong>. Allí en la columna <strong>Acciones</strong> encontrarás la opción
+            indicada.
+        </p>
+        <p style='font-family:Arial; font-size:1.2em; color:#000;'>
+            Para realizar dicha modificación ingresá a <strong>Mis Pagos</strong>. Luego, en la columna
+            <strong>Acciones</strong>, hacé
+            click derecho en opciones y elegí la opción <strong>Objetar pago</strong>. Ingresá el motivo y confirmá
+            la
+            operación. Verás un mensaje automático de modificación exitosa. La entidad corroborará la
+            veracidad del pago y se pondrá en contacto con vos a la brevedad.
+        </p>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,223 @@
+{#- Ported from legacy email/payment_refunded.ftl. Consumes payload.payments[] (+ refunds[].gateway) + commerce + properties + payer labels. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}{{ msg('siteTitle') }}{% endblock %}
+
+{% block header %}
+    {% include "partials/header.html.j2" %}
+{% endblock %}
+
+{% block content %}
+<div style='display:block;'>
+    <div style='text-align: center;'>
+        {% if (payments | length) <= 1 %}
+            <p style='font-family: Arial; font-weight: bold; font-size: 18px; color: #565856;'>Pago
+                Reintegrado</p>
+        {% else %}
+            <p style='font-family: Arial; font-weight: bold; font-size: 18px; color: #565856;'>Pagos
+                Reintegrados</p>
+        {% endif %}
+        <img src='{{ resources_base_url }}/elements-img/ico-title/ico-refunded.png'>
+    </div>
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-size:13px; color:#565856; text-align:center'>
+        <p style='font-size:15px;color:#565856;'>¡Hola <strong>{{ customer_name | capitalize_words }}</strong>!</p>
+        {% if (payments | length) <= 1 %}
+            <p>Tu pago a <strong>{{ commerce.name }}</strong> fue reintegrado de manera exitosa.
+                <br>
+                <strong>El proceso puede demorar algunos días en verse reflejado en tu resumen.</strong>
+                <br>
+                Cualquier consulta al respecto podés escribirnos a info@pagotic.com o comunicarte al 0810-220-5555.
+                <br>
+                Te compartimos el detalle de la transacci&oacute;n:
+            </p>
+        {% else %}
+            <p>Tus pagos a <strong>{{ commerce.name }}</strong> se reintegraron de manera exitosa.
+                <br>
+                <strong>El proceso puede demorar algunos días en verse reflejado en tu resumen.</strong>
+                <br>
+                Cualquier consulta al respecto podés escribirnos a info@pagotic.com o comunicarte al 0810-220-5555.
+                <br>
+                Te compartimos los detalles de las transacciones:
+            </p>
+        {% endif %}
+    </div>
+</div>
+
+<div style='display:block;'>
+    {% if (payments | length) > 1 %}
+        <table width='auto' border='0' align='center' cellpadding='1' cellspacing='1'
+               style='min-width: 350px; max-width: 95%;padding:15px;background-color:#f4f4f2;border-radius: 7px;'>
+            <tr>
+                {% if properties.externalReferenceUse == "true" %}
+                    <td align='center'
+                        style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'>
+                        <strong>
+                            {{ labelExternalReference }}
+                        </strong>
+                    </td>
+                {% elif properties.identificationNumberUse == "true" %}
+                    <td align='center'
+                        style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'>
+                        <strong>
+                            {{ labelIdentificationNumber }}
+                        </strong>
+                    </td>
+                {% endif %}
+                <td align='center'
+                    style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'>
+                    Nombre
+                </td>
+                <td align='center'
+                    style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'>
+                    Concepto
+                </td>
+                <td align='center'
+                    style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'>
+                    Fecha de pago
+                </td>
+                <td align='center'
+                    style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'>
+                    Medio de pago
+                </td>
+                <td align='center'
+                    style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'>
+                    Monto
+                </td>
+            </tr>
+            {% for p in payments %}
+                <tr>
+                    {% if p.payer.external_reference %}
+                        <td align='center'
+                            style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc;padding: 10px 0px'>
+                            <a href='{{ p.form_url }}' target='_blank'
+                               style='text-decoration: none; color:#565856;'>{{ p.payer.external_reference }}
+                            </a>
+                        </td>
+                    {% elif p.payer.identification %}
+                        <td align='center'
+                            style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc;padding: 10px 0px'>
+                            <a href='{{ p.form_url }}' target='_blank'
+                               style='text-decoration: none; color:#565856;'>{{ p.payer.identification.number }}
+                            </a>
+                        </td>
+                    {% endif %}
+                    <td align='center'
+                        style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc;padding: 10px 0px'>{{ customer_name | capitalize_words }}</td>
+                    <td align='center'
+                        style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc;padding: 10px 0px'>
+                        {% for d in p.details %}
+                            {{ d.concept_description }}
+                        {% endfor %}
+                    </td>
+                    <td align='center'
+                        style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc;padding: 10px 0px'>{{ payments[0].paid_date | format_date }}</td>
+                    <td align='center'
+                        style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc;padding: 10px 0px'>
+                        {% if p.payment_methods %}
+                            {% for pm in p.payment_methods %}
+                                {{ pm.media_payment_detail }}
+                                {{ pm.last_four_digits }}
+                            {% endfor %}
+                        {% else %}
+                            Sin medio de pago
+                        {% endif %}
+                    </td>
+                    <td align='center'
+                        style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc;padding: 10px 0px'>{{ p.currency_id }} {{ p.final_amount | format_amount }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <div style='display:block;'>
+            <table width='auto' border='0' align='center' cellpadding='1' cellspacing='1'
+                   style='min-width: 350px; max-width: 95%; padding:15px; background-color:#f4f4f2; border-radius: 7px;'>
+                <tbody>
+                <tr>
+                    <td colspan='100'
+                        style='font-family:Arial;font-size:13px;color:#565856;text-align: center;'>
+                        {% for d in payments[0].details %}
+                            <strong style='font-size: 15px;'>{{ d.concept_description | capitalize_words }}</strong>
+                        {% endfor %}
+                        <br>
+                        {% if payments[0].payer.external_reference %}
+                            {{ labelExternalReference }}:  {{ payments[0].payer.external_reference }}
+                        {% elif payments[0].payer.identification %}
+                            {{ labelIdentificationNumber }}:  {{ payments[0].payer.identification.number }}
+                        {% endif %}
+                        <br>
+                        {{ customer_name | capitalize_words }}
+                        <br>
+                        {% if payments[0].refunds %}
+                            {% for refund in payments[0].refunds %}
+                                {% if refund.status == "approved" %}
+                                    Fecha de aprobaci&oacute;n: {{ refund.approved_date | format_date }}
+                                    {% if refund.authorization_code %}
+                                        <br>
+                                        C&oacute;digo de autorizaci&oacute;n: {{ refund.authorization_code }}
+                                    {% endif %}
+                                    {% if refund.gateway %}
+                                        {% if refund.gateway.batch_number %}
+                                            <br>
+                                            Lote: {{ refund.gateway.batch_number }}
+                                        {% endif %}
+                                        {% if refund.gateway.transaction_id %}
+                                            <br>
+                                            Ticket: {{ refund.gateway.transaction_id }}
+                                        {% endif %}
+                                    {% endif %}
+                                {% endif %}
+                            {% endfor %}
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td style='text-align: center;'>
+                        <img style='padding: 20px 0 5px 0;'
+                             src='{{ resources_base_url }}/elements-img/ico-elements/ico-money.png'>
+                    </td>
+                    <td style='text-align: center;'>
+                        {% if payments[0].payment_methods %}
+                            {{ payments[0].payment_methods[0].media_payment_detail }}
+                        {% endif %}
+                    </td>
+                </tr>
+                <tr>
+                    <td style='font-family:Arial;font-size:15px;color:#565856;text-align: center;width: 50%;'>
+                        <p style='margin-top: 0;'>{{ payments[0].currency_id }} {{ payments[0].final_amount | format_amount }}</p>
+                    </td>
+                    {% if payments[0].payment_methods %}
+                        {% for pm in payments[0].payment_methods %}
+                            <td style='font-family:Arial;font-size:15px;color:#565856;text-align: center;width: 50%;'>
+                                <p style='margin-top: 0;'>{{ pm.last_four_digits }}</p>
+                            </td>
+                        {% endfor %}
+                    {% else %}
+                        <td style='font-family:Arial;font-size:15px;color:#565856;text-align: center;width: 50%;'>
+                            <p style='margin-top: 0;'>Sin medio de pago</p>
+                        </td>
+                    {% endif %}
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    {% endif %}
+    {% if (payments | length) > 10 %}
+        <p align='center'>
+            <a href="https://billetera.paypertic.com/"
+               style='background-color:#E50051;color:#ffffff;text-decoration:none;padding:5px 8px;border-radius:3px;font-size: 14px;'>
+                Ver listado completo de pagos
+            </a>
+        </p>
+    {% endif %}
+</div>
+{% include "partials/payment-options.html.j2" %}
+<br>
+{% include "partials/commerce-site-enabled-button.html.j2" %}
+<br>
+{% include "partials/wallet-invitation.html.j2" %}
+{% include "partials/payer-service-contact.html.j2" %}
+{% endblock %}
+
+{% block footer %}
+    {% include "partials/footer.html.j2" %}
+{% endblock %}

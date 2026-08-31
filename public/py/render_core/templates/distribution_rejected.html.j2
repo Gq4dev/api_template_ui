@@ -1,0 +1,115 @@
+{#- Ported from legacy email/distribution_rejected.ftl. In the legacy template the banner + body markup
+    live inside the 'header' section, so they are rendered into the header block here.
+    Consumes details[] (collector.name, destination.type, destination.value, amount, status,
+    status_detail), status_detail, currency_id, total_amount, request_date. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}{{ msg('siteTitle') }}{% endblock %}
+
+{% block header %}
+{% include "partials/header.html.j2" %}
+<div style='display:block;padding:15px 30px; font-family:Arial; font-size:22px; color:#fff; text-align:left; background:#1E1248 url({{ resources_base_url }}/img/bg-eml-top-ppt.png) right center no-repeat; border-radius:10px 10px 0 0;'>
+    Distribución rechazada
+</div>
+<div style='display:block;background-color:#f0fbfe;'>
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-size:12px; color:#4b4a4a; text-align:justify'>
+        <p style='font-family:Arial; font-size:14px; color:#1E1248; padding-top:5px'>Estimado/a<span style='font-family:Arial; font-size:14px; color:#1E1248;'> {{ details[0].collector.name }}</span>:
+        </p>
+        {% if (details | length) <= 1 %}
+            <div style="margin-top: 10px;margin-bottom: 30px">
+                La siguiente distribución fue rechazada por {{ status_detail }}
+            </div>
+            <div style="margin-bottom: 40px">
+                Te compartimos el detalle:
+            </div>
+        {% else %}
+            <div style="margin-top: 10px;margin-bottom: 30px">
+                La siguientes distribuciones fueron rechazadas por {{ status_detail }}
+            </div>
+            <div style="margin-bottom: 40px">
+                Te compartimos el detalle de cada transacci&oacute;n:
+            </div>
+        {% endif %}
+        <div style='display:block;background-color:#f6fcfe;padding: 5px;border: 1px solid #d8f2fa;'>
+            <div style="background-color: #F4F4F2;padding: 30px; display: inline-block; border-radius: 8px;width:95%;">
+                <div style="margin-top: 10px">
+                    <img src='{{ resources_base_url }}/elements-img/ico-elements/ico-money.png'/>
+                </div>
+                <div style="margin-top: 10px">{% if currency_id %}{{ currency_id }} {% else %}ARS {% endif %} {{ total_amount | format_amount }}</div>
+                {% if (details | length) >= 1 %}
+                    <div style="margin-bottom: 4px">Fecha: <span style="color: #565857;font-weight: bold;">
+                        {{ request_date | format_date }}
+                    </span></div>
+                    <table style='padding:15px;background-color:#f4f4f2;border-radius: 7px; text-align:center;width:93%;'>
+                        <tr>
+                            <td
+                                style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'>
+                                Destino
+                            </td>
+                            <td align='center'
+                                style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'>
+                                Monto
+                            </td>
+                            <td align='center'
+                                style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'>
+                                Estado
+                            </td>
+                            <td align='center'
+                                style='font-family:Arial;font-size:10px;color:#565856;border-bottom:1px solid #cccccc'>
+                                Detalle
+                            </td>
+                        </tr>
+                        <!-- listar pagos-->
+                        {% for payment in details %}
+                            <tr>
+                                <td
+                                    style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc;padding: 10px 0px; align:center'>
+                                    {{ payment.destination.type }}: {{ payment.destination.value }}
+                                </td>
+                                <td
+                                    style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc;padding: 10px 0px; align:center'>
+                                    {{ payment.amount | format_amount }}
+                                </td>
+                                <td
+                                    style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc;padding: 10px 0px; align:center'>
+                                    {{ payment.status }}
+                                </td>
+                                <td
+                                    style='font-family:Arial; font-size:11px; color:#565856;border-bottom: 1px solid #cccccc;padding: 10px 0px; align:center'>
+                                    {{ payment.status_detail }}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </table>
+                {% else %}
+                    <div style="margin-top: 60px; text-align: start">
+                        <div style="margin-bottom: 4px">Destino:</div>
+                        <div style="color: #565857;font-weight: bold; margin-bottom: 20px;">
+                            {{ details.destination.type }} : {{ details.destination.value }}
+                        </div>
+                        <div style="margin-bottom: 4px">Monto:</div>
+                        <div style="color: #565857;font-weight: bold; margin-bottom: 20px;">
+                            {{ details.amount | format_amount }}
+                        </div>
+                        <div style="margin-bottom: 4px">Estado:</div>
+                        <div style="color: #565857;font-weight: bold; margin-bottom: 4px;">
+                            {{ details.status }}
+                        </div>
+                        <div style="margin-bottom: 4px">Detalle:</div>
+                        <div style="color: #565857;font-weight: bold; margin-bottom: 4px;">
+                            {{ details.status_detail }}
+                        </div>
+                    </div>
+                {% endif %}
+            </div>
+            <p>Muchas gracias por confiar en nosotros</p>
+            <p>Atentamente,
+                <br>
+                <span style='font-size:14px; text-align:left'>El equipo Pago TIC</span></p>
+        </div>
+    </div>
+{% endblock %}
+
+{% block footer %}
+        {% include "partials/footer.html.j2" %}
+{% endblock %}

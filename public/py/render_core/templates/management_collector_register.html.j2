@@ -1,0 +1,53 @@
+{#- Ported from legacy email/management_collector_register.ftl. Plain internal notification. Subject uses signature ({{ signature }} in context). Consumes signature and optional boolean/text flags. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}Alta de entidad{% endblock %}
+
+{% block content %}
+Se ha dado de alta la entidad {{ signature }} con los siguientes datos:<br>
+{% if selfManagement %}
+    Sitios de Autogestión: Si<br>
+{% endif %}
+{% if paymentsWeb %}
+    Webs de pago: Si<br>
+{% endif %}
+{% if forms %}
+    Formularios: Si<br>
+{% endif %}
+{% if integration %}
+    Integración: Si<br>
+{% endif %}
+{% if marketPlace %}
+    Tienda Virtual: Si<br>
+{% endif %}
+{% if eCommerce %}
+    Pagos por internet: Si<br>
+{% endif %}
+{% if presential %}
+    Terminales de carga presencial: Si<br>
+{% endif %}
+{% if telephone %}
+    Recaudación telefónica: Si<br>
+{% endif %}
+{% if strategy %}
+    Estrategia: {{ strategy }}<br>
+{% endif %}
+{% if cargansolicitudes %}
+    ¿De qué manera los pagadores adhieren al sistema?: {{ cargansolicitudes }}<br>
+{% endif %}
+{% if cargansolicitudes2 %}
+    ¿De qué manera los pagadores adhieren al sistema?: {{ cargansolicitudes2 }}<br>
+{% endif %}
+{% if comocargan1 %}
+    ¿Qué métodos de carga de solicitudes de pago desean utilizar?: {{ comocargan1 }}<br>
+{% endif %}
+{% if comocargan2 %}
+    ¿Qué métodos de carga de solicitudes de pago desean utilizar?: {{ comocargan2 }}<br>
+{% endif %}
+{% if comocargan3 %}
+    ¿Qué métodos de carga de solicitudes de pago desean utilizar?: {{ comocargan3 }}<br>
+{% endif %}
+{% if tipoentidad %}
+    Tipo de institución: {{ tipoentidad }}<br>
+{% endif %}
+{% endblock %}

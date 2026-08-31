@@ -1,0 +1,56 @@
+{#- Ported from legacy email/subscription_howto_cancel.ftl. Static instructional content; no payload fields read. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}{{ msg('siteTitle') }}{% endblock %}
+
+{% block header %}
+    {% include "partials/collector-header.html.j2" %}
+{% endblock %}
+
+{% block content %}
+<br>
+<div style='display:block;'>
+    <div align="center"
+         style='padding:15px 30px; display:block; font-family:Arial; font-size:13px; color:#565856; text-align:center; min-width: 350px; max-width: 80%; margin:auto;'>
+        <p style='font-size:15px;color:#565856;font-weight: bold;'>
+            Estimado</p>
+        <p>Para realizar la baja al pago autom&aacute;tico <strong>acced&eacute; a tu Billetera
+                Electr&oacute;nica.</strong> Podr&aacute;s acceder utilizando el correo electr&oacute;nico ingresado al momento de la
+            suscripci&oacute;n y tu contraseña de Billetera Electr&oacute;nica Pago TIC. Si an&uacute;n no generaste una contraseña, podr&aacute;s hacerlo siguiendo las
+            indicaciones del sistema clickeando en la opción indicada.
+            <br>
+            <br>
+
+            <a href="https://billetera.paypertic.com/" target="_blank"
+               style="display: inline-block;
+                           font-size: 14px;
+                           text-align: center;
+                           background-color: #1E1248;
+                           color:#ffffff;
+                           text-decoration:none;
+                           vertical-align: middle;
+                           border: 1px solid #1E1248;
+                           padding: 5px 8px;
+                           border-radius: 0.25rem;">Ir a la Billetera</a>
+            <br>
+            <br>
+            Dentro de tu Billetera Electr&oacute;nica, en la secci&oacute;n <strong>Suscripciones</strong>, pod&eacute;s encontrar
+            todas tus suscripciones al pago autom&aacute;tico, seleccion&aacute; la que desees dar de baja y dej&aacute; una breve
+            descripci&oacute;n del motivo. Si no encontr&aacute;s la suscripci&oacute;n que est&aacute;s buscando, puede que la misma no se
+            encuentre activa. Pod&eacute;s ver la totalidad de conceptos adheridos cambiando el filtro de estado a
+            <strong>todas.</strong>
+            <br>
+            Al cancelar una suscripci&oacute;n es importante tener en cuenta que es posible que se haya generado un
+            pago en el mes en curso. Podr&aacute;s buscarlo en la sección <strong>Mis Pagos</strong>, si el mismo tiene como estado
+            <strong>Emitido</strong> pod&eacute;s objetarlo para evitar su cobro, si el estado es <strong>En Proceso</strong>, la cancelaci&oacute;n regir&aacute; a
+            partir del mes pr&oacute;ximo.
+
+        </p>
+    </div>
+</div>
+
+<br>
+{% include "partials/payer-service-contact.html.j2" %}
+<br>
+{% include "partials/footer.html.j2" %}
+{% endblock %}

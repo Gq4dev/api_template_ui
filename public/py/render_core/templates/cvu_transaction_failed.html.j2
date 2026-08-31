@@ -1,0 +1,55 @@
+{#- Ported from legacy email/cvu_transaction_failed.ftl. Consumes name, status_detail, currency_id,
+    amount, detail.concept_id, reference.cuit_cuil, reference.name, cvu. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}{{ msg('siteTitle') }}{% endblock %}
+
+{% block header %}
+    {% include "partials/collector-header.html.j2" %}
+{% endblock %}
+
+{% block content %}
+        <div style="background-color: white;display: block;padding: 10px;text-align: center; font-family: Arial;size: 1em;           color: #565856;">
+            <div style="color: #565857;font-weight: bold;margin-bottom: 4px;">
+                CVU
+            </div>
+            <div style="margin-bottom: 20px;margin-top: 20px">
+                <img src='{{ resources_base_url }}/elements-img/ico-title/ico-objected.png'/>
+            </div>
+            <div>¡Hola
+                <span style="color: #565857;font-weight: bold;">
+        {{ name }}
+    </span>
+            </div>
+            <div style="margin-top: 10px;margin-bottom: 30px">
+                La siguiente transferencia ha fallado <br> por {{ status_detail }}
+
+            </div>
+            <div style="margin-bottom: 40px">
+                Te compartimos el detalle:
+            </div>
+            <div style="background-color: #F4F4F2;padding: 30px; display: inline-block; border-radius: 8px;">
+                <div style="margin-top: 10px">
+                    <img src='{{ resources_base_url }}/elements-img/ico-elements/ico-money.png'/>
+                </div>
+                <div style="margin-top: 10px">{{ currency_id }} {{ amount | format_amount }}</div>
+                <div style="margin-top: 10px">{{ detail.concept_id }}</div>
+                <div style="margin-top: 30px">CUIT: {{ reference.cuit_cuil }}</div>
+                <div style="margin-top: 60px; text-align: start">
+                    <div style="margin-bottom: 20px">
+                        Destino: *********************************
+                    </div>
+                    <div style="margin-bottom: 4px">CBU/CVU:</div>
+                    <div style="color: #565857;font-weight: bold; margin-bottom: 20px;">
+                        {{ cvu }}
+                    </div>
+                    <div style="margin-bottom: 4px">Banco:</div>
+                    <div style="color: #565857;font-weight: bold; margin-bottom: 4px;">
+                        {{ reference.name }}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% include "partials/collector-service-contact.html.j2" %}
+        {% include "partials/collector-footer.html.j2" %}
+{% endblock %}

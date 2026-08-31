@@ -1,0 +1,80 @@
+{#- Ported from legacy email/payment_share.ftl. Consumes top-level details[], payer, name, message, commerce, currency_id, final_amount, due_date, link. -#}
+{% extends "base.html.j2" %}
+
+{% block title %}{{ msg('siteTitle') }}{% endblock %}
+
+{% block header %}
+    {% include "partials/header.html.j2" %}
+{% endblock %}
+
+{% block content %}
+<div style='display:block;'>
+    <div style='text-align: center;'>
+        <p style='font-family: Arial; font-weight: bold; font-size: 18px; color: #565856;'>Pago Compartido</p>
+        <img src='{{ resources_base_url }}/elements-img/ico-title/ico-share.png'>
+    </div>
+    <div style='padding:15px 30px; display:block; font-family:Arial; font-size:13px; color:#565856; text-align:center'>
+        <p style='margin: 0px; font-size:15px;color:#565856;'>¡Hola <strong>{{ customer_name | capitalize_words }}</strong>!</p>
+        <p style="margin: 0px; ">Nos comunicamos desde Pago TIC para informarte que <strong>{{ name | capitalize_words }}</strong> te envió un formulario para completar el pago de <strong>{{ commerce.name }}</strong>.
+        <br/>
+        {% if message %}
+            <p style="margin: 0px; ">{{ name | capitalize_words }} te dejó el siguiente mensaje:</p>
+            <p>{{ message }}</p>
+        {% endif %}
+        <p style="margin: 0px; ">Ingresá los datos del medio de pago para finalizar la transacción.</p>
+        <p>Si has recibido esta notificación por error, te solicitamos que nos informes a info@pagotic.com</p>
+        <br/>
+        <p style="margin: 0px; ">La transacción se registró con los siguientes datos:</p>
+    </div>
+</div>
+<div style='display:block;'>
+    <table width='auto' border='0' align='center' cellpadding='1' cellspacing='1' style='min-width: 350px; max-width: 95%;padding:15px;background-color:#f4f4f2;border-radius: 7px;'>
+        <tr>
+            <td colspan='100' style='font-family:Arial;font-size:13px;color:#565856;text-align: center;'>
+                <strong>
+                    {% for d in details %}
+                        {{ d.concept_description }}
+
+                    {% endfor %}
+                </strong>
+                <br/>
+                Nº pagador: {% if payer.external_reference %}{{ payer.external_reference }}{% endif %}
+                <br/>
+                {% if due_date %}
+                    Fecha de Vencimiento: {{ due_date | format_date }}
+                {% endif %}
+            </td>
+        </tr>
+        <tr>
+            <td style='text-align: center;'>
+                <img style='padding: 20px 0 5px 0;'
+                     src='{{ resources_base_url }}/elements-img/ico-elements/ico-money.png'>
+            </td>
+        </tr>
+        <tr>
+            <td style='font-family:Arial;font-size:15px;color:#565856;text-align: center;'>
+                <p style='margin-top: 0;'>{{ currency_id }} {{ final_amount | format_amount }}</p>
+            </td>
+        </tr>
+        <tr>
+            <td align="center">
+                <a class="btn" target="_blank" style="background-color: #E50051;
+                          color: #ffffff;
+                          text-decoration: none;
+                          padding: 5px;
+                          border-radius: 3px;"
+                   href='{{ link }}'>PAGAR</a>
+            </td>
+        </tr>
+    </table>
+</div>
+{% include "partials/payment-options.html.j2" %}
+{% include "partials/commerce-site-enabled-button.html.j2" %}
+<br>
+{% include "partials/wallet-invitation.html.j2" %}
+{% include "partials/payer-service-contact.html.j2" %}
+{% endblock %}
+
+{% block footer %}
+    {% include "partials/footer.html.j2" %}
+{% endblock %}

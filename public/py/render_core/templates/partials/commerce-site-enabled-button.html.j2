@@ -1,0 +1,26 @@
+{#- Ported from legacy email/elements/commerce-site-enabled-button.ftl -#}
+{% if commerce.siteEnable and commerce.siteUrl %}
+    <div align="center">
+        <p style="margin-top: 40px; color: #565658">
+            <strong style="margin-top: 5vh; font-size: 2vh;">¿Conoc&eacute;s la oficina web de {{ commerce.name }}?
+            </strong>
+            <br>
+            Desde este sitio pod&eacute;s abonar y ver el detalle de tus pagos.
+        </p>
+        <div>
+            <table border="0" align="center" cellpadding="1" cellspacing="1" style="width:100%;padding:10px;">
+                <tbody>
+                <tr>
+                    <td align="center" style="text-align: center;">
+                        <a style="background-color:#1E1248;color:#ffffff;text-decoration:none;padding:5px 8px;border-radius:3px;font-size: 14px;"
+                           href="{{ commerce.siteUrl }}"
+                           target="_blank">
+                            IR AL SITIO
+                        </a>
+                    </td>
+                </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+{% endif %}

@@ -1,0 +1,262 @@
+{#- Ported from legacy email/subscription_pending.ftl. Consumes customer_name and
+    subscriptions[] (one detail block per item, appended after the steps). -#}
+{% extends "base.html.j2" %}
+
+{% block title %}Actualizá tu adhesión{% endblock %}
+
+{% block header %}
+    {% include "partials/header.html.j2" %}
+{% endblock %}
+
+{% block content %}
+<div class='item-notification bg-review' style='padding: 3em'>
+    <div class='item-notification-title' style='text-align: center;'>
+        <h4 style='font-size: 2em;'>Actualizá tu adhesión y asegurá tus pagos</h4>
+    </div>
+    <p style='font-family:Arial; font-size:1.4em; color:#000; text-align: center; margin-top: 2em;'>
+        ¡Hola <strong>{{ customer_name | capitalize_words }}</strong>!</p>
+    <p style='font-family:Arial; font-size:1.4em; color:#000; text-align: center;'>
+        Desde Pago TIC implementamos nuevas medidas de seguridad para proteger tus datos y garantizar cada uno de tus pagos automáticos.<br>
+        Para poder llevar a cabo estas medidas, te solicitamos actualizar tu medio de pago. Ahora tambien podrás sumar medios de pago alternativos.
+    </p>
+    <p style='font-family:Arial; font-size:1.4em; color:#000; text-align: center;'>
+        ¿Qué vas a ganar con esta actualización?<br>
+        Más seguridad: protegemos tus datos con tecnología tokenizada<br>
+        Más comodidad: si un medio de pago falla, lo intentamos con otro.
+    </p>
+    <p style='font-family:Arial; font-size:1.4em; color:#000; text-align: center;'>
+        Te compartimos el paso a paso para completar la accion:
+    </p>
+    <div style='width: 60%;
+                margin: 0 auto;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                padding: 2em;
+                background-color: #e5e5e5;
+                border-radius: 7px;'>
+        <div style='width: 100%;
+                    display: inline-block;
+                    justify-content: center;
+                    align-items: center;'>
+            <div style='width: 100%;
+                        min-height: 3em;
+                        display: flex;
+                        flex-direction: column !important;
+                        justify-content: flex-start;
+                        align-items: center;
+                        margin-top: 1em;
+                        overflow-wrap: break-word;
+                        font-family: Roboto;
+                        font-size: 1.3em;
+                        color: #000;'>
+                <div style='width: 5%;
+                            height: 100%;
+                            display: flex;
+                            flex-direction: column !important;
+                            justify-content: flex-start;
+                            align-items: center;'>
+                    <div style='width: 1.5em;
+                                height: 1.5em;
+                                text-align: center;
+                                line-height: 1.5em;
+                                font-size: 1em;
+                                background-color: #1E1248;
+                                color: #fff;
+                                border-radius: 50%;
+                                -moz-border-radius: 50%;
+                                -webkit-border-radius: 50%;'>1</div>
+                </div>
+                <div style='width: 95%; margin-left: 1em;'>
+                    Ingresá a tu <strong>billetera electrónica</strong> con tu mail y contraseña:
+                </div>
+            </div>
+            <div style='width: 100%;
+                        min-height: 3em;
+                        display: flex;
+                        flex-direction: row;
+                        justify-content: center;
+                        align-items: center;
+                        margin-top: 1em;
+                        overflow-wrap: break-word;
+                        font-family: Roboto;
+                        font-size: 1.3em;
+                        color: #000;'>
+                <a style='background-color: #1E1248;
+                          color: white;
+                          padding: 10px 20px;
+                          border-radius: 4px;
+                          text-align: center;
+                          text-decoration: none;
+                          text-transform: uppercase;
+                          display: inline-block;
+                          font-size: 16px;
+                          margin: 2px 2px;
+                          cursor: pointer;' href="https://billetera.paypertic.com/suscripciones" role="button" target="_blank">
+                    ir a la billetera
+                </a>
+            </div>
+            <div style='width: 100%;
+                        min-height: 3em;
+                        display: block;
+                        margin-top: 1em;
+                        overflow-wrap: break-word;
+                        font-family: Roboto;
+                        font-size: 1.3em;
+                        color: #000;'>
+                Recordá que el mail debe ser el mismo con el que te suscribiste. Si nunca generaste tu contraseña,
+                hacé click en <strong><i>"Si sos usuario y aún no tenés contraseña hacé click aquí"</i></strong>
+                para recibir los pasos a seguir en tu casilla.
+            </div>
+            <div style='width: 100%;
+                        min-height: 3em;
+                        display: flex;
+                        flex-direction: row;
+                        justify-content: flex-start;
+                        align-items: center;
+                        margin-top: 1em;
+                        overflow-wrap: break-word;
+                        font-family: Roboto;
+                        font-size: 1.3em;
+                        color: #000;'>
+                <div style='width: 5%;
+                            height: 100%;
+                            display: flex;
+                            flex-direction: column;
+                            justify-content: flex-start;
+                            align-items: center;'>
+                    <div style='width: 1.5em;
+                         height: 1.5em;
+                         text-align: center;
+                         line-height: 1.5em;
+                         font-size: 1em;
+                         background-color: #1E1248;
+                         color: #fff;
+                         border-radius: 50%;
+                         -moz-border-radius: 50%;
+                         -webkit-border-radius: 50%;'>2</div>
+                </div>
+                <div style='width: 95%; margin-left: 1em;'>
+                    Una vez dentro de tu billetera, hacé click en <strong><i>Mis Suscripciones</i></strong>. Allí
+                    podrás
+                    ver todos los conceptos adheridos al pago automático.
+                </div>
+            </div>
+            <div style='width: 100%;
+                        min-height: 3em;
+                        display: flex;
+                        flex-direction: row;
+                        justify-content: flex-start;
+                        align-items: center;
+                        margin-top: 1em;
+                        overflow-wrap: break-word;
+                        font-family: Roboto;
+                        font-size: 1.3em;
+                        color: #000;'>
+                <div style='width: 5%;
+                            height: 100%;
+                            display: flex;
+                            flex-direction: column;
+                            justify-content: flex-start;
+                            align-items: center;'>
+                    <div style='width: 1.5em;
+                                height: 1.5em;
+                                text-align: center;
+                                line-height: 1.5em;
+                                font-size: 1em;
+                                background-color: #1E1248;
+                                color: #fff;
+                                border-radius: 50%;
+                                -moz-border-radius: 50%;
+                                -webkit-border-radius: 50%;'>3</div>
+                </div>
+                <div style='width: 95%; margin-left: 1em;'>
+                    Seleccioná la suscripción cuyo medio de pago querés actualizar haciendo click sobre el ícono con
+                    forma de lápiz y seleccioná la opción <strong><i>Cambiar medio de pago</i></strong>.
+                </div>
+            </div>
+            <div style='width: 100%;
+                        min-height: 3em;
+                        display: flex;
+                        flex-direction: row;
+                        justify-content: flex-start;
+                        align-items: center;
+                        margin-top: 1em;
+                        overflow-wrap: break-word;
+                        font-family: Roboto;
+                        font-size: 1.3em;
+                        color: #000;'>
+                <div style='width: 5%;
+                            height: 100%;
+                            display: flex;
+                            flex-direction: column;
+                            justify-content: flex-start;
+                            align-items: center;'>
+                    <div style='width: 1.5em;
+                                height: 1.5em;
+                                text-align: center;
+                                line-height: 1.5em;
+                                font-size: 1em;
+                                background-color: #1E1248;
+                                color: #fff;
+                                border-radius: 50%;
+                                -moz-border-radius: 50%;
+                                -webkit-border-radius: 50%;'>4</div>
+                </div>
+                <div style='width: 95%; margin-left: 1em;'>
+                    Ingresá la información solicitada y hacé click en <strong><i>Aceptar</i></strong>, vas a ver un
+                    mensaje
+                    confirmando la operación exitosa.
+                </div>
+            </div>
+            <div style='width: 100%;
+                        font-family:Arial;
+                        font-size:1.7em;
+                        color:#000;
+                        text-align: left;
+                        margin-top: 1em;
+                        font-weight: 700;'>
+                ¡Listo!
+            </div>
+        </div>
+    </div>
+</div>
+{% if subscriptions %}
+<div style='margin-top: 2em;'>
+    <p style='font-family:Arial; font-size:1.4em; color:#000; text-align: center; font-weight: 700;'>
+        {% if (subscriptions | length) > 1 %}
+            Estas son las suscripciones que estás actualizando:
+        {% else %}
+            Esta es la suscripción que estás actualizando:
+        {% endif %}
+    </p>
+    {% for s in subscriptions %}
+    <div style='width: 60%;
+                margin: 1em auto;
+                padding: 1.5em;
+                background-color: #e5e5e5;
+                border-radius: 7px;
+                font-family: Arial;
+                font-size: 1.2em;
+                color: #000;
+                overflow-wrap: break-word;'>
+        <p style='margin: 0 0 .5em;'><strong>Concepto:</strong> {{ s.detail.concept_id }} - {{ s.detail.concept_description }}</p>
+        {% if s.detail.external_reference %}
+        <p style='margin: 0 0 .5em;'><strong>Referencia:</strong> {{ s.detail.external_reference }}</p>
+        {% endif %}
+        {% if s.amount and s.amount > 0 %}
+        <p style='margin: 0 0 .5em;'><strong>Importe:</strong> $ {{ s.amount | format_amount }}</p>
+        {% endif %}
+        <p style='margin: 0 0 .5em;'><strong>Medio de pago:</strong> {{ s.payment_method.media_payment_detail }} - XXXXXXXX{{ s.payment_method.last_four_digits }}</p>
+        {% if s.due_day %}
+        <p style='margin: 0;'><strong>Vencimiento:</strong> día {{ s.due_day }}</p>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endblock %}
+
+{% block footer %}
+    {% include "partials/footer.html.j2" %}
+{% endblock %}
