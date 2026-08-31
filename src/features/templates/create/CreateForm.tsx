@@ -15,9 +15,10 @@ import type {
   RenderResult,
 } from "../../../preview/protocol";
 import { AvailableVariables } from "./AvailableVariables";
+import { FormatToolbar } from "./FormatToolbar";
 import { InsertBlocks } from "./InsertBlocks";
 import { PreviewPanel } from "./PreviewPanel";
-import { insertSnippet } from "./blockSnippets";
+import { insertSnippet, wrapSelection } from "./blockSnippets";
 import type { CreateFormFieldErrors, CreateFormValues } from "./createForm.logic";
 
 interface CreateFormProps {
@@ -103,11 +104,30 @@ export function CreateForm({
     const { text, caret } = insertSnippet(values.html, snippet, at, to);
     onFieldChange("html", text);
 
+    restoreSelection(caret, caret);
+  }
+
+  /**
+   * Wraps the selection in `open`/`close`. With nothing selected it drops the
+   * pair around a placeholder and SELECTS it, so the next keystroke replaces it
+   * instead of landing after a word the author never asked for.
+   */
+  function handleWrap(open: string, close: string, placeholder?: string) {
+    const el = htmlRef.current;
+    const at = el ? el.selectionStart : values.html.length;
+    const to = el ? el.selectionEnd : at;
+
+    const next = wrapSelection(values.html, open, close, at, to, placeholder);
+    onFieldChange("html", next.text);
+    restoreSelection(next.selectionStart, next.selectionEnd);
+  }
+
+  function restoreSelection(start: number, end: number) {
     requestAnimationFrame(() => {
       const target = htmlRef.current;
       if (!target) return;
       target.focus();
-      target.setSelectionRange(caret, caret);
+      target.setSelectionRange(start, end);
     });
   }
 
@@ -225,6 +245,8 @@ export function CreateForm({
           variables={catalogue?.variables ?? []}
           onInsert={handleInsertBlock}
         />
+
+        <FormatToolbar onWrap={handleWrap} onInsert={handleInsertBlock} />
 
         <Textarea
           ref={htmlRef}

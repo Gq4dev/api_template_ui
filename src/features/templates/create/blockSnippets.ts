@@ -94,6 +94,82 @@ export function variableSnippet(name: string): string {
   return `{{ ${name} }}`;
 }
 
+/**
+ * The brand palette, as the bundled templates actually use it.
+ *
+ * A free colour picker would be worse than no picker: it invites an author to
+ * pick a purple that is almost #1E1248, and nothing in the pipeline would ever
+ * flag it. These are the values already in the platform's own templates.
+ */
+export const BRAND_COLORS = [
+  { value: "#1E1248", label: "Violeta (títulos)" },
+  { value: "#565856", label: "Gris (texto)" },
+  { value: "#E50051", label: "Rosa (acciones)" },
+  { value: "#8a8a8a", label: "Gris claro (secundario)" },
+  { value: "#ffffff", label: "Blanco (sobre fondo)" },
+] as const;
+
+export const ALIGNMENTS = [
+  { value: "left", label: "Izquierda" },
+  { value: "center", label: "Centro" },
+  { value: "right", label: "Derecha" },
+] as const;
+
+/** `<strong>`, not `<b>`: it carries emphasis, and mail clients render both. */
+export const BOLD_WRAP = { open: "<strong>", close: "</strong>" } as const;
+
+export function colorWrap(hex: string) {
+  return { open: `<span style="color:${hex};">`, close: "</span>" };
+}
+
+/**
+ * Alignment is a BLOCK property, so it wraps in a div rather than a span.
+ * `text-align` on an inline element does nothing, and an author who applied
+ * "centrar" and saw no change would reasonably conclude the tool is broken.
+ */
+export function alignWrap(alignment: string) {
+  return { open: `<div style="text-align:${alignment};">`, close: "</div>" };
+}
+
+/** An <img> with the attributes mail clients need. */
+export function imageSnippet(path: string, alt = ""): string {
+  return (
+    `<img src="{{ resources_base_url }}/${path}" alt="${alt}"\n` +
+    `     style="display:block;border:0;max-width:100%;margin:0 auto;" />`
+  );
+}
+
+/**
+ * Wraps the selection in `open`/`close`, or drops the pair around `placeholder`
+ * when nothing is selected.
+ *
+ * Returns a range rather than a caret: with a selection the author is done and
+ * wants the cursor after it, but with none, the placeholder is the thing they
+ * are about to overwrite, so selecting it means the next keystroke replaces it.
+ */
+export function wrapSelection(
+  text: string,
+  open: string,
+  close: string,
+  selectionStart: number,
+  selectionEnd: number,
+  placeholder = "texto",
+): { text: string; selectionStart: number; selectionEnd: number } {
+  const start = clamp(selectionStart, 0, text.length);
+  const end = clamp(Math.max(selectionEnd, start), 0, text.length);
+
+  const selected = text.slice(start, end);
+  const inner = selected.length > 0 ? selected : placeholder;
+  const wrapped = `${open}${inner}${close}`;
+
+  const next = `${text.slice(0, start)}${wrapped}${text.slice(end)}`;
+  const innerStart = start + open.length;
+
+  return selected.length > 0
+    ? { text: next, selectionStart: start + wrapped.length, selectionEnd: start + wrapped.length }
+    : { text: next, selectionStart: innerStart, selectionEnd: innerStart + inner.length };
+}
+
 export interface InsertResult {
   text: string;
   /** Where the caret belongs afterwards: at the end of what was inserted. */

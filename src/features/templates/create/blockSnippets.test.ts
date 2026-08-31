@@ -1,9 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
   BLOCK_SNIPPETS,
+  BRAND_COLORS,
+  alignWrap,
+  colorWrap,
+  imageSnippet,
   insertSnippet,
   variableSnippet,
+  wrapSelection,
 } from "./blockSnippets";
+import { ALL_ASSET_PATHS } from "./emailAssets";
 
 describe("insertSnippet", () => {
   // Blocks are separated by a blank line, not a bare newline: these snippets are
@@ -103,5 +109,91 @@ describe("BLOCK_SNIPPETS", () => {
 describe("variableSnippet", () => {
   it("wraps a name as a Jinja interpolation", () => {
     expect(variableSnippet("customer_name")).toBe("{{ customer_name }}");
+  });
+});
+
+describe("wrapSelection", () => {
+  it("wraps what is selected", () => {
+    const out = wrapSelection("hola mundo", "<strong>", "</strong>", 5, 10);
+    expect(out.text).toBe("hola <strong>mundo</strong>");
+  });
+
+  it("leaves the caret after the wrap when there was a selection", () => {
+    const out = wrapSelection("hola mundo", "<strong>", "</strong>", 5, 10);
+    expect(out.selectionStart).toBe(out.text.length);
+    expect(out.selectionEnd).toBe(out.text.length);
+  });
+
+  // With nothing selected the placeholder is the thing the author is about to
+  // overwrite, so it comes back SELECTED — otherwise they have to hunt for it
+  // and delete it by hand every single time.
+  it("selects the placeholder when nothing was selected", () => {
+    const out = wrapSelection("", "<strong>", "</strong>", 0, 0);
+    expect(out.text).toBe("<strong>texto</strong>");
+    expect(out.text.slice(out.selectionStart, out.selectionEnd)).toBe("texto");
+  });
+
+  it("honours a custom placeholder", () => {
+    const out = wrapSelection("", "<div>", "</div>", 0, 0, "contenido");
+    expect(out.text.slice(out.selectionStart, out.selectionEnd)).toBe("contenido");
+  });
+
+  it("clamps a selection that runs past the end", () => {
+    const out = wrapSelection("ab", "<i>", "</i>", 1, 999);
+    expect(out.text).toBe("a<i>b</i>");
+  });
+});
+
+describe("format helpers", () => {
+  it("colours with a span, which is inline like the text it wraps", () => {
+    expect(colorWrap("#1E1248").open).toBe('<span style="color:#1E1248;">');
+  });
+
+  // text-align does nothing on an inline element, so alignment has to wrap in a
+  // block. An author who centred something and saw no change would conclude the
+  // tool is broken — and be right.
+  it("aligns with a div, because text-align needs a block", () => {
+    const wrap = alignWrap("center");
+    expect(wrap.open).toContain("<div");
+    expect(wrap.open).toContain("text-align:center");
+  });
+
+  it("offers only colours the platform templates already use", () => {
+    for (const color of BRAND_COLORS) {
+      expect(color.value).toMatch(/^#[0-9a-fA-F]{6}$/);
+    }
+    expect(BRAND_COLORS.map((c) => c.value)).toContain("#1E1248");
+  });
+});
+
+describe("imageSnippet", () => {
+  it("routes through resources_base_url rather than hard-coding a host", () => {
+    const out = imageSnippet("img/logo-pagotic.svg");
+    expect(out).toContain("{{ resources_base_url }}/img/logo-pagotic.svg");
+    expect(out).not.toContain("https://");
+  });
+
+  it("carries the attributes a mail client needs", () => {
+    const out = imageSnippet("img/logo-pagotic.svg", "logo");
+    expect(out).toContain('alt="logo"');
+    // border:0 kills the blue link border Outlook draws around a linked image.
+    expect(out).toContain("border:0");
+    expect(out).toContain("max-width:100%");
+  });
+});
+
+describe("EMAIL_ASSETS", () => {
+  it("lists no duplicates", () => {
+    expect(new Set(ALL_ASSET_PATHS).size).toBe(ALL_ASSET_PATHS.length);
+  });
+
+  // The regex that harvested these caught two CSS background fragments
+  // ("img/billetes.png) right center no-repeat; …"). Anything with a paren or a
+  // semicolon in it is not a path and would render as a broken image.
+  it("holds paths, not the CSS they were extracted from", () => {
+    for (const path of ALL_ASSET_PATHS) {
+      expect(path, path).not.toMatch(/[)\s;]/);
+      expect(path, path).toMatch(/\.(png|svg|jpg|gif)$/);
+    }
   });
 });
