@@ -1,0 +1,59 @@
+name: CI
+
+# Lint, verify the vendored render core, test and build on every push and PR.
+#
+# The render-core check is the reason this workflow exists. The preview renders
+# with a COPY of the sender service's Jinja2 code, and a copy is only safe while
+# something proves it is still the same copy. That proof was a command someone
+# had to remember to type; here it is a gate.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # public/pyodide is ~14 MB staged by the postinstall hook: the runtime is
+      # copied from node_modules, but the jinja2 wheels are fetched from
+      # jsdelivr. Cached so a CDN hiccup does not fail an unrelated PR. Keyed on
+      # the lockfile because that is what pins the pyodide version the wheels
+      # must match.
+      - name: Cache staged Pyodide
+        uses: actions/cache@v4
+        with:
+          path: public/pyodide
+          key: pyodide-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      # Runs the postinstall hook, which stages Pyodide.
+      - run: npm ci
+
+      - run: npm run lint
+
+      # Verifies the vendored copy under public/py/render_core against the
+      # manifest, which catches a hand-edit to generated code.
+      #
+      # It canNOT catch upstream drift: notifications-sender-service is not
+      # checked out here, and the script says so rather than passing quietly.
+      # Detecting a sender that has moved still requires running this next to
+      # both repos, or a future job that checks the sibling out.
+      #
+      # This step is also the machine the manifest is verified ON, and the
+      # reason the hashes are EOL-normalized: hashed as raw bytes, a manifest
+      # written on Windows reports all 69 files as drifted right here.
+      - name: Check the vendored render core
+        run: npm run check:render-core
+
+      - run: npm test
+
+      - run: npm run build
