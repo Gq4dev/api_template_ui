@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { Alert, Button, Container, Group, Stack, Text, Title } from "@mantine/core";
+import { useDebouncedValue } from "@mantine/hooks";
 import { useUpdateDraft } from "../../../queries/useUpdateDraft";
 import { useVersionContent } from "../../../queries/useVersionContent";
 import { useVariableCatalogue } from "../../../queries/useVariableCatalogue";
@@ -54,6 +55,7 @@ export function EditDraftPage() {
   const [previewVariant, setPreviewVariant] = useState<PreviewVariant>("single");
 
   const previewMutation = useJinjaPreview();
+  const [live, setLive] = useState(true);
   const loaded = contentQuery.data;
 
   // Seeds the form ONCE per version, when the stored content arrives — not on
@@ -104,6 +106,25 @@ export function EditDraftPage() {
       variant: previewVariant,
     });
   }
+
+  // Same live preview as the create page: correcting a draft is the same act
+  // of authoring, and a feedback loop that exists on one screen and not the
+  // other is worse than not having it. See CreatePage for the reasoning on the
+  // debounce and on depending only on the debounced values.
+  const [debouncedHtml] = useDebouncedValue(values.html, 500);
+  const [debouncedSubject] = useDebouncedValue(values.subject, 500);
+
+  useEffect(() => {
+    if (!live || !catalogueReady || debouncedHtml.trim() === "") return;
+    previewMutation.mutate({
+      action,
+      actionType,
+      html: debouncedHtml,
+      subject: debouncedSubject.trim() || undefined,
+      variant: previewVariant,
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, catalogueReady, debouncedHtml, debouncedSubject, action, actionType, previewVariant]);
 
   function handlePreviewVariantChange(next: PreviewVariant) {
     setPreviewVariant(next);
@@ -280,6 +301,8 @@ export function EditDraftPage() {
         canRender={canRender}
         onPreviewVariantChange={handlePreviewVariantChange}
         onRenderPreview={handleRenderPreview}
+        live={live}
+        onLiveChange={setLive}
         onFieldChange={handleFieldChange}
         onAuthorEmailChange={handleAuthorEmailChange}
         onSubmit={handleSubmit}

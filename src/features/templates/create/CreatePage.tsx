@@ -1,6 +1,7 @@
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { Alert, Button, Container, Group, Stack, Text, Title } from "@mantine/core";
+import { useDebouncedValue } from "@mantine/hooks";
 import { useCreateTemplate } from "../../../queries/useCreateTemplate";
 import { useVariableCatalogue } from "../../../queries/useVariableCatalogue";
 import { useJinjaPreview } from "../../../queries/useJinjaPreview";
@@ -80,6 +81,8 @@ export function CreatePage() {
   // --- Authoring aids -----------------------------------------------------
   const [previewVariant, setPreviewVariant] = useState<PreviewVariant>("single");
   const previewMutation = useJinjaPreview();
+  // On by default: the whole point is not having to ask.
+  const [live, setLive] = useState(true);
 
   const action = values.action.trim();
   const actionType = values.actionType.trim();
@@ -110,6 +113,36 @@ export function CreatePage() {
       variant: previewVariant,
     });
   }
+
+  /**
+   * Live preview: re-render a beat after typing stops.
+   *
+   * Debounced rather than per-keystroke because every render is a full Jinja2
+   * pass — cheap once Pyodide is warm, but not free, and a render mid-word
+   * shows a template that is momentarily broken. 500 ms is long enough to be
+   * past the end of a word and short enough to still feel like a consequence
+   * of what you typed.
+   *
+   * The dependency list is deliberately the DEBOUNCED values, not the live
+   * ones: depending on both re-runs the effect on every keystroke and defeats
+   * the debounce entirely.
+   */
+  const [debouncedHtml] = useDebouncedValue(values.html, 500);
+  const [debouncedSubject] = useDebouncedValue(values.subject, 500);
+
+  useEffect(() => {
+    if (!live || !catalogueReady || debouncedHtml.trim() === "") return;
+    previewMutation.mutate({
+      action,
+      actionType,
+      html: debouncedHtml,
+      subject: debouncedSubject.trim() || undefined,
+      variant: previewVariant,
+    });
+    // previewMutation is a stable-enough mutation object; including it would
+    // re-fire on every state transition of the render it just started.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [live, catalogueReady, debouncedHtml, debouncedSubject, action, actionType, previewVariant]);
 
   function handlePreviewVariantChange(next: PreviewVariant) {
     setPreviewVariant(next);
@@ -270,6 +303,8 @@ export function CreatePage() {
         canRender={canRender}
         onPreviewVariantChange={handlePreviewVariantChange}
         onRenderPreview={handleRenderPreview}
+        live={live}
+        onLiveChange={setLive}
         onFieldChange={handleFieldChange}
         onAuthorEmailChange={handleAuthorEmailChange}
         onSubmit={handleSubmit}

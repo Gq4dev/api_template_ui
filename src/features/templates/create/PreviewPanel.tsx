@@ -4,6 +4,7 @@ import {
   Group,
   SegmentedControl,
   Stack,
+  Switch,
   Text,
 } from "@mantine/core";
 import type { PreviewVariant, RenderResult } from "../../../preview/protocol";
@@ -18,6 +19,9 @@ interface PreviewPanelProps {
   canRender: boolean;
   onVariantChange: (variant: PreviewVariant) => void;
   onRender: () => void;
+  /** Re-render on its own shortly after typing stops. */
+  live?: boolean;
+  onLiveChange?: (live: boolean) => void;
 }
 
 const FAILURE_TITLES: Record<string, string> = {
@@ -36,6 +40,8 @@ export function PreviewPanel({
   canRender,
   onVariantChange,
   onRender,
+  live,
+  onLiveChange,
 }: PreviewPanelProps) {
   const failure = result && !result.ok ? result : null;
   const success = result && result.ok ? result : null;
@@ -64,6 +70,19 @@ export function PreviewPanel({
               { label: "Multi", value: "multi" },
             ]}
           />
+          {onLiveChange ? (
+            <Switch
+              size="xs"
+              checked={live ?? false}
+              onChange={(event) => onLiveChange(event.currentTarget.checked)}
+              label="En vivo"
+            />
+          ) : null}
+          {/*
+            Kept even with live on: the debounce means a render is always a
+            moment away, and when an author wants to look NOW, waiting on a
+            timer they cannot see reads as the app having stopped working.
+          */}
           <Button
             size="xs"
             variant="default"

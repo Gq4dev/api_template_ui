@@ -1,7 +1,9 @@
 import { useRef, type FormEvent } from "react";
 import {
   Alert,
+  Box,
   Button,
+  Grid,
   Group,
   Stack,
   Text,
@@ -49,6 +51,9 @@ interface CreateFormProps {
   canRender: boolean;
   onPreviewVariantChange: (variant: PreviewVariant) => void;
   onRenderPreview: () => void;
+  /** Live preview: re-renders on its own a moment after you stop typing. */
+  live: boolean;
+  onLiveChange: (live: boolean) => void;
   // --- form ---
   onFieldChange: <K extends keyof CreateFormValues>(
     field: K,
@@ -80,6 +85,8 @@ export function CreateForm({
   canRender,
   onPreviewVariantChange,
   onRenderPreview,
+  live,
+  onLiveChange,
   onFieldChange,
   onAuthorEmailChange,
   onSubmit,
@@ -133,7 +140,24 @@ export function CreateForm({
 
   return (
     <form onSubmit={onSubmit} noValidate>
-      <Stack gap="md" mt="md">
+      {/*
+        Two columns: what you write on the left, what the recipient gets on the
+        right, both on screen at once. The preview used to sit below the fold,
+        so checking a change meant scrolling away from the thing you changed —
+        and the errors this catches are visual ones, invisible in the source.
+        A <div> nested in a <p> renders as valid Jinja and silently drops the
+        paragraph's styling; you only ever see that in the rendered mail.
+
+        The right column sticks so it stays in view while the left one scrolls.
+        The Grid must NOT align to flex-start for that: a column sized to its own
+        content gives the sticky element no room to travel, and it scrolls away
+        with everything else.
+        Below `lg` they stack, because a 400px-wide preview of an email is not
+        a preview of anything.
+      */}
+      <Grid gap="lg" mt="md">
+        <Grid.Col span={{ base: 12, lg: 7 }}>
+      <Stack gap="md">
         {isEdit ? (
           <Alert color="yellow" title="Editing a draft">
             Saving overwrites this draft in place — same version number, no new
@@ -278,16 +302,6 @@ export function CreateForm({
           error={fieldErrors.subject}
         />
 
-        <PreviewPanel
-          variant={previewVariant}
-          result={preview}
-          engineErrorMessage={previewEngineErrorMessage}
-          isRendering={isRendering}
-          canRender={canRender}
-          onVariantChange={onPreviewVariantChange}
-          onRender={onRenderPreview}
-        />
-
         <TextInput
           label="Author email"
           description="Sent as X-User-Email for auditing. Defaults to “system” when left blank."
@@ -308,6 +322,24 @@ export function CreateForm({
           </Button>
         </Group>
       </Stack>
+        </Grid.Col>
+
+        <Grid.Col span={{ base: 12, lg: 5 }}>
+          <Box style={{ position: "sticky", top: 16 }}>
+            <PreviewPanel
+              variant={previewVariant}
+              result={preview}
+              engineErrorMessage={previewEngineErrorMessage}
+              isRendering={isRendering}
+              canRender={canRender}
+              onVariantChange={onPreviewVariantChange}
+              onRender={onRenderPreview}
+              live={live}
+              onLiveChange={onLiveChange}
+            />
+          </Box>
+        </Grid.Col>
+      </Grid>
     </form>
   );
 }
