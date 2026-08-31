@@ -68,7 +68,26 @@ const MODULES = [
 
 const TEMPLATES_SUBDIR = "templates";
 
-const sha256 = (buffer) => createHash("sha256").update(buffer).digest("hex");
+/**
+ * Hash of a text file's CONTENT, with line endings normalized to LF.
+ *
+ * Every file this script syncs is text (.py, .j2). The repo stores text as LF
+ * (`* text=auto eol=lf` in .gitattributes) while a Windows working copy holds
+ * CRLF, so hashing raw bytes records CRLF hashes on a Windows sync and then
+ * mismatches on every fresh clone — `--check` would report the entire core as
+ * drifted the first time anyone else ran it.
+ *
+ * That failure mode is worse than it looks. A guard that cries wolf gets
+ * switched off or "fixed" with a re-sync, and then the copy is free to diverge
+ * in silence, which is the exact failure this manifest exists to prevent.
+ *
+ * Same reasoning as the posix-style manifest keys below: compare what the files
+ * SAY, not how one checkout happens to spell a newline.
+ */
+export const hashText = (path) =>
+  createHash("sha256")
+    .update(readFileSync(path, "utf8").replace(/\r\n/g, "\n"))
+    .digest("hex");
 
 /**
  * The versions the Lambda actually renders with. Pyodide ships its own Jinja2
@@ -123,7 +142,7 @@ function sourceFiles() {
 
 function hashAll(files) {
   const hashes = {};
-  for (const [key, path] of files) hashes[key] = sha256(readFileSync(path));
+  for (const [key, path] of files) hashes[key] = hashText(path);
   return hashes;
 }
 
