@@ -49,6 +49,15 @@ Thumbs.db
 # Gentle AI tooling cache
 .atl/*.cache.json
 
+# Python bytecode. Vite copies public/ verbatim, so anything CPython drops next
+# to the vendored render core would ship in the bundle.
+__pycache__/
+*.pyc
+
+# Pyodide runtime + wheels (~14 MB), staged from node_modules and the CDN by
+# scripts/setup-pyodide.mjs. Regenerate with: npm run setup:pyodide
+public/pyodide/
+
 # Misc
 *.tmp
 tmp/
