@@ -12,6 +12,7 @@ export type UiErrorKind =
   | "OBJECT_NOT_FOUND"
   | "OBJECT_ALREADY_EXISTS"
   | "VALIDATOR_UNAVAILABLE"
+  | "ENDPOINT_UNAVAILABLE"
   | "NETWORK"
   | "UNKNOWN";
 
@@ -50,9 +51,31 @@ const DEFAULT_MESSAGES: Record<UiErrorKind, string> = {
   // is why this is worth telling apart from a plain failure.
   VALIDATOR_UNAVAILABLE:
     "The template checker is unavailable, so nothing was saved. Your work is not lost — try again in a moment.",
+  // Names the deployment, because the template is not the problem and looking
+  // for the fault in it is a wasted afternoon.
+  ENDPOINT_UNAVAILABLE:
+    "The API does not serve this endpoint. The deployed backend is older than this UI — it needs to be redeployed.",
   NETWORK: "Network error — the server is unreachable or the request was blocked (check CORS).",
   UNKNOWN: "Unexpected error.",
 };
+
+/**
+ * What a non-2xx means when the body carries no code we know.
+ *
+ * A 404 is the case worth separating. Our own "that template does not exist"
+ * always arrives as a TEMPLATE_NOT_FOUND envelope, so a 404 WITHOUT one did not
+ * come from a handler at all — Spring answered before routing, because the API
+ * serving the request has no such endpoint. In practice that means a deployment
+ * older than this UI.
+ *
+ * Telling them apart matters because the two send you to opposite places:
+ * TEMPLATE_NOT_FOUND is about the data, this is about the server. Collapsed into
+ * "Unexpected error", a missing endpoint reads as a broken template and you go
+ * looking for the fault in Jinja that renders perfectly well.
+ */
+function fallbackKind(error: ApiError): UiErrorKind {
+  return error.status === 404 ? "ENDPOINT_UNAVAILABLE" : "UNKNOWN";
+}
 
 /**
  * Maps any error thrown by templatesApi calls into a normalized UiError.
@@ -64,7 +87,7 @@ const DEFAULT_MESSAGES: Record<UiErrorKind, string> = {
  */
 export function toUiError(error: unknown): UiError {
   if (error instanceof ApiError) {
-    const kind = CODE_TO_KIND[error.body.error] ?? "UNKNOWN";
+    const kind = CODE_TO_KIND[error.body.error] ?? fallbackKind(error);
 
     if (kind === "VALIDATION_ERROR") {
       return {
