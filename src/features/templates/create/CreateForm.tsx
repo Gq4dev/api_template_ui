@@ -16,6 +16,7 @@ import type {
   PreviewVariant,
   RenderResult,
 } from "../../../preview/protocol";
+import { deriveTemplateKey } from "../../../lib/collector";
 import { AvailableVariables } from "./AvailableVariables";
 import { FormatToolbar } from "./FormatToolbar";
 import { InsertBlocks } from "./InsertBlocks";
@@ -94,6 +95,29 @@ export function CreateForm({
   const isEdit = mode === "edit";
   const htmlRef = useRef<HTMLTextAreaElement>(null);
 
+  /*
+    A collector turns the template key from something you may type into
+    something you may only READ.
+
+    With no collector the key stays exactly as it always was: free text,
+    optional, derived server-side when left blank. There is no reason to take
+    that away from anyone who has been using it.
+
+    With a collector it is a different field. The server derives the key from
+    action + actionType + collector and rejects any templateKey that does not
+    match what it derived — so a typed value here has one possible outcome that
+    a derived one does not, and that outcome is a 400. Making it read-only and
+    computing it live turns the field into what it actually is at that point:
+    confirmation of what is about to be created, updated as you type, rather
+    than a decision anyone still gets to make.
+  */
+  const hasCollector = values.collector.trim() !== "";
+  const derivedTemplateKey = deriveTemplateKey(
+    values.action,
+    values.actionType,
+    values.collector,
+  );
+
   /**
    * Splices a snippet in at the caret and puts the caret back after it.
    *
@@ -159,20 +183,21 @@ export function CreateForm({
         <Grid.Col span={{ base: 12, lg: 7 }}>
       <Stack gap="md">
         {isEdit ? (
-          <Alert color="yellow" title="Editing a draft">
-            Saving overwrites this draft in place — same version number, no new
-            version created. Nothing reaches customers until you publish it.
+          <Alert color="yellow" title="Estás editando un borrador">
+            Guardar sobrescribe este borrador en el lugar: mismo número de
+            versión, no se crea una versión nueva. Nada llega a los clientes
+            hasta que lo publiques.
           </Alert>
         ) : (
-          <Alert color="blue" title="Each save here creates a new version">
-            Submitting this form creates a brand-new version as a draft. To change
-            a draft you already saved, edit it from the templates list instead —
-            that keeps the same version number.
+          <Alert color="blue" title="Cada guardado aquí crea una versión nueva">
+            Enviar este formulario crea una versión completamente nueva como
+            borrador. Para cambiar un borrador que ya guardaste, edítalo desde el
+            listado de plantillas: así conserva el mismo número de versión.
           </Alert>
         )}
 
         {networkErrorMessage ? (
-          <Alert color="orange" title="Network error">
+          <Alert color="orange" title="Error de red">
             {networkErrorMessage}
           </Alert>
         ) : null}
@@ -180,7 +205,11 @@ export function CreateForm({
         {generalErrors.length > 0 ? (
           <Alert
             color="red"
-            title={isEdit ? "Could not save the draft" : "Could not create template"}
+            title={
+              isEdit
+                ? "No se pudo guardar el borrador"
+                : "No se pudo crear la plantilla"
+            }
           >
             <Stack gap={4}>
               {generalErrors.map((detail) => (
@@ -217,15 +246,37 @@ export function CreateForm({
           error={fieldErrors.actionType}
         />
 
+        {/* Locked in edit mode with the rest of the identity: the version
+            already exists, and which clients it overrides is settled. */}
+        <TextInput
+          label="Collector"
+          description="Opcional: una versión propia para un cliente. Déjalo en blanco para la plantilla genérica, que es la que recibe todo cliente que no tenga una versión propia."
+          placeholder="bbva"
+          disabled={isEdit}
+          value={values.collector}
+          onChange={(event) =>
+            onFieldChange("collector", event.currentTarget.value)
+          }
+          error={fieldErrors.collector}
+        />
+
         <TextInput
           label="Template key"
           description={
             isEdit
-              ? "Fixed for this version."
-              : "Optional — derived from action + actionType when left blank."
+              ? "Fijo para esta versión."
+              : hasCollector
+                ? "Se deriva de Action + Action type + Collector. Es de solo lectura mientras haya un Collector: el servidor deriva esta key y rechaza cualquier otra."
+                : "Opcional: si lo dejas en blanco, se deriva de Action + Action type."
           }
           disabled={isEdit}
-          value={values.templateKey}
+          // readOnly rather than disabled: a disabled input is dropped from the
+          // accessibility tree and greys out to the point of looking absent,
+          // and this value is the one thing on screen confirming what is about
+          // to be created. It has to stay readable and selectable.
+          readOnly={!isEdit && hasCollector}
+          variant={!isEdit && hasCollector ? "filled" : "default"}
+          value={hasCollector ? derivedTemplateKey : values.templateKey}
           onChange={(event) =>
             onFieldChange("templateKey", event.currentTarget.value)
           }
@@ -243,10 +294,10 @@ export function CreateForm({
           <Tooltip
             label={
               canInsertStarter
-                ? "Fills the field with a working skeleton using this action's own variables"
+                ? "Rellena el campo con un esqueleto que funciona, usando las variables propias de esta Action"
                 : catalogueReady
-                  ? "Clear the body first — this would overwrite what you wrote"
-                  : "Fill in action and action type first"
+                  ? "Vacía primero el cuerpo: esto sobrescribiría lo que escribiste"
+                  : "Completa primero Action y Action type"
             }
             withArrow
             multiline
@@ -259,7 +310,7 @@ export function CreateForm({
                 disabled={!canInsertStarter}
                 onClick={onInsertStarter}
               >
-                Insert example
+                Insertar ejemplo
               </Button>
             </span>
           </Tooltip>
@@ -276,7 +327,7 @@ export function CreateForm({
           ref={htmlRef}
           label="HTML body"
           description={
-            'Jinja2. Extend the base layout and fill its blocks: {% extends "base.html.j2" %}. Include partials/header.html.j2 and partials/footer.html.j2 for the platform branding — base leaves those blocks empty, so a template without them renders as bare text. Style inline: mail clients discard <style>.'
+            'Jinja2. Extiende el layout base y rellena sus bloques: {% extends "base.html.j2" %}. Incluye partials/header.html.j2 y partials/footer.html.j2 para el branding de la plataforma: base deja esos bloques vacíos, así que una plantilla sin ellos se renderiza como texto pelado. Los estilos van inline: los clientes de mail descartan <style>.'
           }
           placeholder={'{% extends "base.html.j2" %}\n{% block content %}...{% endblock %}'}
           required
@@ -296,7 +347,7 @@ export function CreateForm({
 
         <TextInput
           label="Subject"
-          description="Optional — may contain Jinja, e.g. {{ commerce.name }}. Comes back rendered in the preview."
+          description="Opcional: puede contener Jinja, por ejemplo {{ commerce.name }}. Vuelve renderizado en la vista previa."
           value={values.subject}
           onChange={(event) => onFieldChange("subject", event.currentTarget.value)}
           error={fieldErrors.subject}
@@ -304,21 +355,21 @@ export function CreateForm({
 
         <TextInput
           label="Author email"
-          description="Sent as X-User-Email for auditing. Defaults to “system” when left blank."
+          description="Se envía como X-User-Email para auditoría. Si lo dejas en blanco, se usa “system”."
           placeholder="admin@example.com"
           value={authorEmail}
           onChange={(event) => onAuthorEmailChange(event.currentTarget.value)}
         />
 
-        <Alert color="blue" variant="light" title="This saves a draft">
-          Nothing is sent to customers yet. The version is stored as a draft you can keep
-          editing, and it stays invisible to the notification service until you publish it
-          from the templates list.
+        <Alert color="blue" variant="light" title="Esto guarda un borrador">
+          Todavía no se envía nada a los clientes. La versión queda guardada como
+          un borrador que puedes seguir editando, y el servicio de notificaciones
+          no la ve hasta que la publiques desde el listado de plantillas.
         </Alert>
 
         <Group justify="flex-end" mt="sm">
           <Button type="submit" loading={isSubmitting} disabled={isSubmitting}>
-            {isEdit ? "Save changes" : "Save draft"}
+            {isEdit ? "Guardar cambios" : "Guardar borrador"}
           </Button>
         </Group>
       </Stack>

@@ -3,6 +3,10 @@
 // fields. Kept separate from CreatePage/CreateForm so it is unit-testable
 // without React or a DOM.
 import type { CreateTemplateRequest } from "../../../api/types";
+import {
+  COLLECTOR_FORMAT_MESSAGE,
+  isValidCollector,
+} from "../../../lib/collector";
 
 // No date field. Creating a template does not schedule it — it produces a DRAFT,
 // and WHEN it applies is decided later, at publish time, by whoever decides to
@@ -11,6 +15,14 @@ import type { CreateTemplateRequest } from "../../../api/types";
 export interface CreateFormValues {
   action: string;
   actionType: string;
+  /**
+   * Optional per-client override. Blank is the normal case and means "the
+   * generic template" — the one every client gets when they have no variant of
+   * their own. It is NOT a third part of the identity: action + actionType
+   * still say WHAT this mail is, and the collector only says WHO gets a
+   * different version of it.
+   */
+  collector: string;
   templateKey: string;
   html: string;
   subject: string;
@@ -19,10 +31,44 @@ export interface CreateFormValues {
 export const EMPTY_CREATE_FORM_VALUES: CreateFormValues = {
   action: "",
   actionType: "",
+  collector: "",
   templateKey: "",
   html: "",
   subject: "",
 };
+
+/**
+ * Builds the initial form values, prefilling the identity fields from the URL
+ * query when present. This powers the "New version" flow from the list: those
+ * fields land filled while html/subject stay blank (append-only — a new version
+ * is authored from scratch, not copied).
+ *
+ * The READ half of a round trip whose write half is `newVersionHref` in
+ * list/listFilters.logic.ts. Nothing but the parameter names ties the two
+ * together, which is why they are tested against each other rather than each
+ * against a hand-written URL.
+ *
+ * `collector` is seeded with them for one reason: "New version" of a collector
+ * variant has to stay a version of THAT variant. Dropping it would silently
+ * turn the flow into "author a new generic", and the author would only find out
+ * after publishing it to every client.
+ *
+ * A MISSING parameter yields "", and that is not a fallback — it is the answer.
+ * Blank is how the API spells "the generic", so a link written for a generic
+ * row and a link with no `collector` at all land on the same form, which is the
+ * behaviour every caller already assumes.
+ */
+export function initialFormValues(
+  searchParams: URLSearchParams,
+): CreateFormValues {
+  return {
+    ...EMPTY_CREATE_FORM_VALUES,
+    action: searchParams.get("action") ?? "",
+    actionType: searchParams.get("actionType") ?? "",
+    collector: searchParams.get("collector") ?? "",
+    templateKey: searchParams.get("templateKey") ?? "",
+  };
+}
 
 export type CreateFormFieldErrors = Partial<
   Record<keyof CreateFormValues, string>
@@ -30,13 +76,16 @@ export type CreateFormFieldErrors = Partial<
 
 const REQUIRED_FIELDS = ["action", "actionType", "html"] as const;
 
+// The field names are the ones printed on the labels above the inputs, and the
+// API's own vocabulary, so they stay in English inside the Spanish sentence:
+// translating them would point the author at a field that is not on screen.
 const REQUIRED_MESSAGES: Record<(typeof REQUIRED_FIELDS)[number], string> = {
-  action: "Action is required.",
-  actionType: "Action type is required.",
-  html: "HTML body is required.",
+  action: "Action es obligatorio.",
+  actionType: "Action type es obligatorio.",
+  html: "HTML body es obligatorio.",
 };
 
-/** Client-side required-field validation, run before calling the API. */
+/** Client-side validation, run before calling the API. */
 export function validateCreateForm(
   values: CreateFormValues,
 ): CreateFormFieldErrors {
@@ -46,6 +95,16 @@ export function validateCreateForm(
     if (!values[field].trim()) {
       errors[field] = REQUIRED_MESSAGES[field];
     }
+  }
+
+  // The collector is optional, so a blank one is never an error — that is the
+  // generic template, the overwhelmingly common case. But a MALFORMED one is a
+  // hard 400 from the server, not a quiet degradation to the generic: "I don't
+  // understand what you asked" and "this collector has no variant" are
+  // deliberately different answers. Catching it here saves the round trip
+  // without changing the outcome.
+  if (!isValidCollector(values.collector)) {
+    errors.collector = COLLECTOR_FORMAT_MESSAGE;
   }
 
   return errors;
@@ -69,8 +128,25 @@ export function buildCreatePayload(
     html: values.html,
   };
 
+  const collector = values.collector.trim();
+  if (collector) payload.collector = collector;
+
+  /*
+    With a collector present the templateKey is NOT ours to send.
+
+    The server derives it (`action_actiontype__collector`) and rejects with a
+    400 any templateKey that does not match what it derived. So a copy of that
+    derivation travelling in the payload can do exactly one thing that omitting
+    it cannot: be wrong. A trailing space, a stale value left in the field from
+    before the collector was typed, a rule that tightens on the server before it
+    tightens here — every one of those turns a valid create into a 400 that
+    blames a field the author cannot see the point of.
+
+    The form still SHOWS the derived key (read-only) so the author knows what
+    they are creating. Showing is the job; sending is not.
+  */
   const templateKey = values.templateKey.trim();
-  if (templateKey) payload.templateKey = templateKey;
+  if (!collector && templateKey) payload.templateKey = templateKey;
 
   const subject = values.subject.trim();
   if (subject) payload.subject = subject;
@@ -81,6 +157,10 @@ export function buildCreatePayload(
 const KNOWN_FIELDS = new Set<keyof CreateFormValues>([
   "action",
   "actionType",
+  // Without this, a backend detail like "collector: must match ..." lands in
+  // the general banner at the top of the form — far away from the one field it
+  // is about, and phrased for a machine. On the field it reads as an answer.
+  "collector",
   "templateKey",
   "html",
   "subject",

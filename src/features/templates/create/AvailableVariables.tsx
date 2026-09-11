@@ -11,7 +11,7 @@ interface AvailableVariablesProps {
 // Renders one sample value compactly enough for a tooltip.
 function describe(value: unknown): string {
   if (value === null || value === undefined) return "null";
-  if (Array.isArray(value)) return `list of ${value.length}`;
+  if (Array.isArray(value)) return `lista de ${value.length}`;
   if (typeof value === "object") return Object.keys(value as object).join(", ");
   return String(value);
 }
@@ -31,7 +31,7 @@ export function AvailableVariables({
     <div>
       <Group gap="xs" mb={4} align="center">
         <Text size="sm" fw={500}>
-          Available variables
+          Variables disponibles
         </Text>
         {isLoading ? <Loader size="xs" /> : null}
         {catalogue?.template ? (
@@ -43,14 +43,14 @@ export function AvailableVariables({
 
       {!ready ? (
         <Text size="sm" c="dimmed">
-          Fill in action and action type to see what this notification provides.
+          Completa Action y Action type para ver qué provee esta notificación.
         </Text>
       ) : unknownAction ? (
         <Text size="sm" c="dimmed">
-          The sender has no template for this action, so there is nothing to list.
-          Check the action and action type — a typo here is the usual cause. You
-          can still author and preview the body; the sample data will just come
-          from what you reference yourself.
+          El emisor no tiene ninguna plantilla para esta Action, así que no hay
+          nada que listar. Revisa Action y Action type: un error de tipeo aquí es
+          la causa habitual. Igual puedes escribir el cuerpo y previsualizarlo;
+          los datos de ejemplo saldrán solo de lo que referencies tú.
         </Text>
       ) : catalogue && catalogue.variables.length > 0 ? (
         <Stack gap={6}>
@@ -70,14 +70,14 @@ export function AvailableVariables({
             ))}
           </Group>
           <Text size="xs" c="dimmed">
-            Hover a variable to see the sample value the preview will use. Use
-            them as <code>{"{{ name }}"}</code>; blocks such as{" "}
-            <code>{"{% for %}"}</code> are available too.
+            Pasa el cursor sobre una variable para ver el valor de ejemplo que
+            usará la vista previa. Se usan como <code>{"{{ nombre }}"}</code>;
+            también tienes bloques como <code>{"{% for %}"}</code>.
           </Text>
         </Stack>
       ) : (
         <Text size="sm" c="dimmed">
-          This action's template references no variables.
+          La plantilla de esta Action no referencia ninguna variable.
         </Text>
       )}
     </div>

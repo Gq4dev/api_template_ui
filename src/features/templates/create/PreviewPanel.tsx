@@ -25,10 +25,10 @@ interface PreviewPanelProps {
 }
 
 const FAILURE_TITLES: Record<string, string> = {
-  SYNTAX: "This template does not parse",
-  TEMPLATE_NOT_FOUND: "A referenced template is missing",
-  RENDER: "It parsed, then failed while rendering",
-  ENGINE: "The preview engine is unavailable",
+  SYNTAX: "Esta plantilla no se puede parsear",
+  TEMPLATE_NOT_FOUND: "Falta una plantilla referenciada",
+  RENDER: "Se parseó, pero falló al renderizar",
+  ENGINE: "El motor de vista previa no está disponible",
 };
 
 // Presentational — owns no state and makes no calls.
@@ -51,13 +51,14 @@ export function PreviewPanel({
       <Group justify="space-between" align="flex-end">
         <div>
           <Text size="sm" fw={500}>
-            Preview
+            Vista previa
           </Text>
           <Text size="xs" c="dimmed">
-            Rendered in your browser by the same Jinja2 render core the sender
-            uses, with sample data derived from this action's template. A field
-            that will arrive empty is shown empty — this is what the recipient
-            gets, not a guarantee that the data will be there.
+            Se renderiza en tu navegador con el mismo render core Jinja2 que usa
+            el emisor, y con datos de ejemplo derivados de la plantilla de esta
+            Action. Un campo que vaya a llegar vacío se muestra vacío: esto es lo
+            que recibe el destinatario, no una garantía de que el dato vaya a
+            estar.
           </Text>
         </div>
         <Group gap="xs">
@@ -66,8 +67,8 @@ export function PreviewPanel({
             value={variant}
             onChange={(value) => onVariantChange(value as PreviewVariant)}
             data={[
-              { label: "Single", value: "single" },
-              { label: "Multi", value: "multi" },
+              { label: "Individual", value: "single" },
+              { label: "Múltiple", value: "multi" },
             ]}
           />
           {onLiveChange ? (
@@ -90,14 +91,15 @@ export function PreviewPanel({
             loading={isRendering}
             disabled={!canRender || isRendering}
           >
-            Render preview
+            Ver vista previa
           </Button>
         </Group>
       </Group>
 
       {!canRender ? (
         <Text size="sm" c="dimmed">
-          Fill in action, action type and the HTML body to render a preview.
+          Completa Action, Action type y el HTML body para renderizar una vista
+          previa.
         </Text>
       ) : null}
 
@@ -106,19 +108,22 @@ export function PreviewPanel({
           <Stack gap={4}>
             <Text size="sm">{engineErrorMessage}</Text>
             <Text size="xs" c="dimmed">
-              Nothing is wrong with your template — the browser could not start
-              the renderer. Try reloading; if it persists, the staged runtime may
-              be missing (npm run setup:pyodide).
+              Tu plantilla no tiene nada malo: el navegador no pudo arrancar el
+              renderizador. Prueba recargando; si sigue pasando, puede faltar el
+              runtime preparado (npm run setup:pyodide).
             </Text>
           </Stack>
         </Alert>
       ) : null}
 
       {failure ? (
-        <Alert color="red" title={FAILURE_TITLES[failure.kind] ?? "Could not render"}>
+        <Alert
+          color="red"
+          title={FAILURE_TITLES[failure.kind] ?? "No se pudo renderizar"}
+        >
           <Stack gap={4}>
             <Text size="sm" ff="monospace">
-              {failure.line != null ? `line ${failure.line}: ` : ""}
+              {failure.line != null ? `línea ${failure.line}: ` : ""}
               {failure.message}
             </Text>
           </Stack>
@@ -128,34 +133,37 @@ export function PreviewPanel({
       {/* A stale render core is the one way this preview can silently disagree
           with what gets sent, so it is an error, not a note. */}
       {success && success.unknownFilters.length > 0 ? (
-        <Alert color="red" title="This template uses filters the renderer does not have">
+        <Alert
+          color="red"
+          title="Esta plantilla usa filtros que el renderizador no tiene"
+        >
           <Text size="sm" ff="monospace">
             {success.unknownFilters.join(", ")}
           </Text>
           <Text size="xs" mt={4}>
-            The preview below rendered them as-is, but sending would fail. Either
-            the filter name is a typo, or the vendored render core is out of date
-            (npm run sync:render-core).
+            La vista previa de abajo los renderizó tal cual, pero el envío
+            fallaría. O el nombre del filtro tiene un error de tipeo, o el render
+            core incluido está desactualizado (npm run sync:render-core).
           </Text>
         </Alert>
       ) : null}
 
       {success?.actionProblem ? (
-        <Alert color="yellow" title="Unrecognised action">
+        <Alert color="yellow" title="Action no reconocida">
           <Text size="sm">{success.actionProblem.message}</Text>
           <Text size="xs" mt={4}>
-            The body below still rendered, but the sample data comes only from
-            what this draft references — there is no production template for this
-            action to compare against.
+            El cuerpo de abajo igual se renderizó, pero los datos de ejemplo
+            salen solo de lo que referencia este borrador: no hay una plantilla
+            de producción para esta Action con la que comparar.
           </Text>
         </Alert>
       ) : null}
 
       {success?.subjectProblem ? (
-        <Alert color="yellow" title="The subject line does not render">
+        <Alert color="yellow" title="El subject no se renderiza">
           <Text size="sm" ff="monospace">
             {success.subjectProblem.line != null
-              ? `line ${success.subjectProblem.line}: `
+              ? `línea ${success.subjectProblem.line}: `
               : ""}
             {success.subjectProblem.message}
           </Text>

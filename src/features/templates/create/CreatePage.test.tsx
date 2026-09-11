@@ -55,7 +55,7 @@ async function fillRequiredFields(
 }
 
 function submitButton(): HTMLElement {
-  return screen.getByRole("button", { name: /save draft/i });
+  return screen.getByRole("button", { name: /guardar borrador/i });
 }
 
 // The `Idempotency-Key` sent on the Nth create call (0-indexed). `create` is the
@@ -80,13 +80,13 @@ describe("CreatePage", () => {
     const { templatesApi } = await import("../../../api/templatesClient");
     const user = await renderCreatePage();
 
-    await user.click(screen.getByRole("button", { name: /save draft/i }));
+    await user.click(screen.getByRole("button", { name: /guardar borrador/i }));
 
     expect(
-      await screen.findByText("Action is required."),
+      await screen.findByText("Action es obligatorio."),
     ).toBeInTheDocument();
-    expect(screen.getByText("Action type is required.")).toBeInTheDocument();
-    expect(screen.getByText("HTML body is required.")).toBeInTheDocument();
+    expect(screen.getByText("Action type es obligatorio.")).toBeInTheDocument();
+    expect(screen.getByText("HTML body es obligatorio.")).toBeInTheDocument();
     expect(templatesApi.create).not.toHaveBeenCalled();
   });
 
@@ -114,7 +114,7 @@ describe("CreatePage", () => {
       "<p>hi</p>",
     );
 
-    await user.click(screen.getByRole("button", { name: /save draft/i }));
+    await user.click(screen.getByRole("button", { name: /guardar borrador/i }));
 
     expect(
       await screen.findByText(/status: DRAFT/i),
@@ -149,11 +149,11 @@ describe("CreatePage", () => {
       "<p>hi</p>",
     );
 
-    await user.click(screen.getByRole("button", { name: /save draft/i }));
+    await user.click(screen.getByRole("button", { name: /guardar borrador/i }));
 
     await waitFor(() => {
       expect(
-        screen.getByText(/server is unreachable/i),
+        screen.getByText(/no se puede llegar al servidor/i),
       ).toBeInTheDocument();
     });
   });
@@ -170,7 +170,7 @@ describe("CreatePage", () => {
 
     await user.click(submitButton());
     await waitFor(() => {
-      expect(screen.getByText(/server is unreachable/i)).toBeInTheDocument();
+      expect(screen.getByText(/no se puede llegar al servidor/i)).toBeInTheDocument();
     });
 
     // Resubmit the same (unedited) form — a retry of the same logical attempt.
@@ -230,7 +230,7 @@ describe("CreatePage", () => {
     const key1 = idempotencyKeyOfCall(templatesApi.create, 0);
 
     // "Create another" resets the form for an unrelated create attempt.
-    await user.click(screen.getByRole("button", { name: /create another/i }));
+    await user.click(screen.getByRole("button", { name: /crear otra/i }));
     await fillRequiredFields(user);
     await user.click(submitButton());
 
@@ -241,6 +241,80 @@ describe("CreatePage", () => {
     expect(key1).toEqual(expect.any(String));
     expect(key2).toEqual(expect.any(String));
     expect(key2).not.toEqual(key1);
+  });
+
+  // With a collector set, the template key stops being a decision and becomes a
+  // confirmation of what the server is about to derive. It must show the
+  // derived key, refuse edits, and NOT travel in the payload — the server
+  // rejects any templateKey that does not match what it derived, so sending our
+  // own copy could only ever be wrong.
+  it("derives a read-only template key once a collector is typed", async () => {
+    const user = await renderCreatePage();
+
+    await user.type(screen.getByRole("textbox", { name: /^action$/i }), "PAYMENT");
+    await user.type(
+      screen.getByRole("textbox", { name: /^action type$/i }),
+      "APPROVED",
+    );
+    await user.type(
+      screen.getByRole("textbox", { name: /^collector$/i }),
+      "BBVA",
+    );
+
+    const keyField = screen.getByRole("textbox", { name: /^template key$/i });
+    expect(keyField).toHaveValue("payment_approved__bbva");
+    expect(keyField).toHaveAttribute("readonly");
+  });
+
+  it("sends the collector and omits the templateKey the server derives", async () => {
+    const { templatesApi } = await import("../../../api/templatesClient");
+    vi.mocked(templatesApi.create).mockResolvedValueOnce(SUCCESS_RESPONSE);
+
+    const user = await renderCreatePage();
+    await fillRequiredFields(user);
+    await user.type(
+      screen.getByRole("textbox", { name: /^collector$/i }),
+      "bbva",
+    );
+    await user.click(submitButton());
+
+    await waitFor(() => {
+      expect(templatesApi.create).toHaveBeenCalledTimes(1);
+    });
+    const [payload] = vi.mocked(templatesApi.create).mock.calls[0];
+    expect(payload.collector).toBe("bbva");
+    expect(payload).not.toHaveProperty("templateKey");
+  });
+
+  // A malformed collector is a hard 400 server-side, not a quiet fallback to
+  // the generic. Catching it here saves the round trip and keeps the two
+  // outcomes distinct.
+  it("blocks submit on a malformed collector", async () => {
+    const { templatesApi } = await import("../../../api/templatesClient");
+    const user = await renderCreatePage();
+
+    await fillRequiredFields(user);
+    await user.type(
+      screen.getByRole("textbox", { name: /^collector$/i }),
+      "bbva sa",
+    );
+    await user.click(submitButton());
+
+    expect(
+      await screen.findByText(/separados por un único guion bajo/i),
+    ).toBeInTheDocument();
+    expect(templatesApi.create).not.toHaveBeenCalled();
+  });
+
+  it("names the generic in the success panel when no collector was set", async () => {
+    const { templatesApi } = await import("../../../api/templatesClient");
+    vi.mocked(templatesApi.create).mockResolvedValueOnce(SUCCESS_RESPONSE);
+
+    const user = await renderCreatePage();
+    await fillRequiredFields(user);
+    await user.click(submitButton());
+
+    expect(await screen.findByText(/collector: Genérica/i)).toBeInTheDocument();
   });
 
   it("maps a VALIDATION_ERROR detail onto the associated form field", async () => {

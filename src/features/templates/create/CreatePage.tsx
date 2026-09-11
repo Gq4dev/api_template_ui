@@ -7,6 +7,7 @@ import { useVariableCatalogue } from "../../../queries/useVariableCatalogue";
 import { useJinjaPreview } from "../../../queries/useJinjaPreview";
 import { IdempotencyKeyManager } from "../../../lib/idempotency";
 import { toUiError } from "../../../lib/errors";
+import { collectorLabel } from "../../../lib/collector";
 import type { PreviewVariant } from "../../../preview/protocol";
 import { AppHeader } from "../../../app/AppHeader";
 import { CreateForm } from "./CreateForm";
@@ -14,6 +15,7 @@ import {
   EMPTY_CREATE_FORM_VALUES,
   buildCreatePayload,
   buildStarterTemplate,
+  initialFormValues,
   mapValidationDetails,
   validateCreateForm,
   type CreateFormFieldErrors,
@@ -42,19 +44,6 @@ function persistAuthorEmail(value: string): void {
   } catch {
     // Not fatal — the field just won't be prefilled next time.
   }
-}
-
-// Builds the initial form values, prefilling action/actionType/templateKey from
-// the URL query when present. This powers the "New version" flow from the list:
-// those three fields land filled while html/subject stay blank (append-only — a
-// new version is authored from scratch, not copied).
-function initialFormValues(searchParams: URLSearchParams): CreateFormValues {
-  return {
-    ...EMPTY_CREATE_FORM_VALUES,
-    action: searchParams.get("action") ?? "",
-    actionType: searchParams.get("actionType") ?? "",
-    templateKey: searchParams.get("templateKey") ?? "",
-  };
 }
 
 // Container — owns form state, the idempotency key, the mutation, and error
@@ -251,27 +240,36 @@ export function CreatePage() {
     return (
       <Container size="sm" py="xl">
         <AppHeader />
-        <Title order={2}>Create template</Title>
+        <Title order={2}>Crear plantilla</Title>
         {/* Blue, not green. A green "success" here would read as "done", and the
             author's job is not done: nothing reaches a customer until they publish. */}
-        <Alert color="blue" title="Draft saved — not live yet" mt="md">
+        <Alert color="blue" title="Borrador guardado — todavía no está en vivo" mt="md">
           <Stack gap="xs">
+            {/* The collector rides next to the key, and says "Generic" when
+                there is none. Two drafts whose keys differ only by a
+                `__collector` suffix are one glance apart, and the difference
+                between them is who receives the mail — worth stating in words
+                rather than leaving to be spotted in a string. The value comes
+                from the form rather than the response because create/commit
+                answer with the key, not the dimension that produced it. */}
             <Text>
-              <strong>{templateKey}</strong> v{version} — status: {status}
+              <strong>{templateKey}</strong> v{version} — status: {status} —
+              collector: {collectorLabel(values.collector)}
             </Text>
             <Text size="sm">
-              The notification service cannot see this version yet. Publish it from the
-              templates list when you are happy with how it renders.
+              El servicio de notificaciones todavía no ve esta versión. Publícala
+              desde el listado de plantillas cuando estés conforme con cómo
+              renderiza.
             </Text>
             <Text size="sm" c="dimmed">
               checksum: {checksum}
             </Text>
             <Group mt="sm">
               <Button component={Link} to={`/?templateKey=${encodeURIComponent(templateKey)}`}>
-                Review and publish
+                Revisar y publicar
               </Button>
               <Button variant="default" onClick={handleCreateAnother}>
-                Create another
+                Crear otra
               </Button>
             </Group>
           </Stack>
@@ -283,7 +281,7 @@ export function CreatePage() {
   return (
     <Container size="sm" py="xl">
       <AppHeader />
-      <Title order={2}>Create template</Title>
+      <Title order={2}>Crear plantilla</Title>
       <CreateForm
         values={values}
         fieldErrors={fieldErrors}

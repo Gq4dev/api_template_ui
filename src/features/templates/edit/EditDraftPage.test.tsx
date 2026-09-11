@@ -56,11 +56,15 @@ const DRAFT: TemplateContentResponse = {
   status: "DRAFT",
   action: "ORDER",
   actionType: "CREATED",
+  collector: null,
   subject: "Your order",
   variables: ["orderId"],
   html: "<p>original {{orderId}}</p>",
   effectiveFrom: null,
   effectiveTo: null,
+  // An addressed read serves exactly the version that was asked for, so there
+  // is nothing to fall back from.
+  fallbackToGeneric: false,
 };
 
 // A fresh QueryClient per render: AppProviders holds a module-scope client, and a
@@ -122,7 +126,7 @@ describe("EditDraftPage", () => {
 
     await user.clear(htmlBody());
     await user.type(htmlBody(), "<p>fixed</p>");
-    await user.click(screen.getByRole("button", { name: /save changes/i }));
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
     await waitFor(() => {
       expect(templatesApi.updateDraft).toHaveBeenCalledWith(
@@ -167,9 +171,9 @@ describe("EditDraftPage", () => {
 
     await user.clear(htmlBody());
     await user.type(htmlBody(), "<p>local</p>");
-    await user.click(screen.getByRole("button", { name: /save changes/i }));
+    await user.click(screen.getByRole("button", { name: /guardar cambios/i }));
 
-    await screen.findByText(/draft saved/i);
+    await screen.findByText(/borrador guardado/i);
     await waitFor(() => {
       expect(templatesApi.getVersion).toHaveBeenCalledTimes(2);
     });
@@ -188,10 +192,10 @@ describe("EditDraftPage", () => {
     renderEditPage();
 
     expect(
-      await screen.findByText(/no longer editable/i),
+      await screen.findByText(/ya no se puede editar/i),
     ).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /save changes/i }),
+      screen.queryByRole("button", { name: /guardar cambios/i }),
     ).not.toBeInTheDocument();
   });
 });

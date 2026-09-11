@@ -76,6 +76,11 @@ export function EditDraftPage() {
     setValues({
       action: loaded.action ?? "",
       actionType: loaded.actionType ?? "",
+      // Seeded and then locked by CreateForm's edit mode, like the rest of the
+      // identity. It is not sent on an update — UpdateDraftRequest carries only
+      // content — but leaving it blank would show the author a form claiming
+      // they are editing the generic while they are in fact editing a variant.
+      collector: loaded.collector ?? "",
       templateKey: loaded.templateKey,
       html: loaded.html,
       subject: loaded.subject ?? "",
@@ -200,7 +205,7 @@ export function EditDraftPage() {
 
   const backToList = (
     <Button component={Link} to={`/?templateKey=${encodeURIComponent(templateKey)}`}>
-      Back to list
+      Volver al listado
     </Button>
   );
 
@@ -208,7 +213,7 @@ export function EditDraftPage() {
     return (
       <Container size="sm" py="xl">
         <AppHeader />
-        <Text c="dimmed">Loading draft…</Text>
+        <Text c="dimmed">Cargando el borrador…</Text>
       </Container>
     );
   }
@@ -217,12 +222,12 @@ export function EditDraftPage() {
     return (
       <Container size="sm" py="xl">
         <AppHeader />
-        <Alert color="red" title="Could not load this version" mt="md">
+        <Alert color="red" title="No se pudo cargar esta versión" mt="md">
           <Stack gap="sm">
             <Text size="sm">
               {contentQuery.error
                 ? toUiError(contentQuery.error).message
-                : "That version does not exist."}
+                : "Esa versión no existe."}
             </Text>
             <Group>{backToList}</Group>
           </Stack>
@@ -235,21 +240,24 @@ export function EditDraftPage() {
     return (
       <Container size="sm" py="xl">
         <AppHeader />
-        <Alert color="yellow" title="This version is no longer editable" mt="md">
+        <Alert color="yellow" title="Esta versión ya no se puede editar" mt="md">
           <Stack gap="sm">
             <Text size="sm">
-              <strong>{loaded.templateKey}</strong> v{loaded.version} is{" "}
-              {loaded.status}. Published content is frozen, because something may
-              already have been sent with it. Create a new version instead.
+              <strong>{loaded.templateKey}</strong> v{loaded.version} está en{" "}
+              {loaded.status}. El contenido publicado queda congelado, porque
+              puede que ya se haya enviado algo con él. Crea una versión nueva en
+              su lugar.
             </Text>
             <Group>
               {backToList}
               <Button
                 variant="default"
                 component={Link}
-                to={`/create?templateKey=${encodeURIComponent(loaded.templateKey)}&action=${encodeURIComponent(loaded.action ?? "")}&actionType=${encodeURIComponent(loaded.actionType ?? "")}`}
+                // Carries the collector so a new version of a variant stays a
+                // version of that variant instead of quietly becoming generic.
+                to={`/create?templateKey=${encodeURIComponent(loaded.templateKey)}&action=${encodeURIComponent(loaded.action ?? "")}&actionType=${encodeURIComponent(loaded.actionType ?? "")}&collector=${encodeURIComponent(loaded.collector ?? "")}`}
               >
-                New version
+                Nueva versión
               </Button>
             </Group>
           </Stack>
@@ -262,15 +270,15 @@ export function EditDraftPage() {
     <Container size="sm" py="xl">
       <AppHeader />
       <Title order={2}>
-        Edit draft — {loaded.templateKey} v{loaded.version}
+        Editar borrador — {loaded.templateKey} v{loaded.version}
       </Title>
 
       {mutation.isSuccess ? (
-        <Alert color="green" title="Draft saved" mt="md">
+        <Alert color="green" title="Borrador guardado" mt="md">
           <Stack gap="sm">
             <Text size="sm">
-              Still a draft, still not live. Publish it from the list when you are
-              ready.
+              Sigue siendo un borrador y sigue sin estar en vivo. Publícalo desde
+              el listado cuando lo tengas listo.
             </Text>
             <Group>{backToList}</Group>
           </Stack>
