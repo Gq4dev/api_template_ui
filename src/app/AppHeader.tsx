@@ -9,7 +9,7 @@ export function AppHeader() {
         Templates
       </Anchor>
       <Anchor component={Link} to="/create">
-        Create
+        Crear
       </Anchor>
     </Group>
   );

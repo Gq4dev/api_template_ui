@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../api/templatesClient";
+import { PreviewEngineError } from "../preview/client";
 import { toUiError } from "./errors";
 
 describe("toUiError", () => {
@@ -10,7 +11,7 @@ describe("toUiError", () => {
     });
     expect(toUiError(error)).toEqual({
       kind: "VALIDATION_ERROR",
-      message: "Some fields are invalid.",
+      message: "Hay campos inválidos.",
       fieldDetails: ["html: must not be blank"],
     });
   });
@@ -45,5 +46,20 @@ describe("toUiError", () => {
   it("maps a non-ApiError failure to NETWORK", () => {
     const result = toUiError(new TypeError("Failed to fetch"));
     expect(result.kind).toBe("NETWORK");
+  });
+
+  // A LOCAL failure must never be reported as a network one. PreviewEngineError
+  // is not an ApiError, so before this branch existed it fell through to the
+  // catch-all and told the reader to go and check CORS — about a request the
+  // server had already answered correctly. The message is asserted on, not just
+  // the kind: pointing at the server is the whole bug, so the sentence must not
+  // drift back towards it.
+  it("maps a local render-engine failure away from NETWORK", () => {
+    const result = toUiError(
+      new PreviewEngineError("pyodide failed to initialise"),
+    );
+    expect(result.kind).toBe("PREVIEW_ENGINE");
+    expect(result.message).not.toContain("CORS");
+    expect(result.message).toContain("local");
   });
 });

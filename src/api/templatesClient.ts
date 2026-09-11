@@ -17,6 +17,7 @@ import type {
   PublishRequest,
   VersionStatusResponse,
   ResolveResponse,
+  CollectorsInventoryResponse,
   TemplateContentResponse,
   TemplateSummary,
   PageResponse,
@@ -177,10 +178,58 @@ export const templatesApi = {
   },
 
   // Effective version WITH html, resolved by action + actionType.
-  resolveByAction(action: string, actionType: string, at?: string) {
+  //
+  // `collector` is an override, not a filter: sending one asks "does THIS client
+  // have its own servable version?", and the answer is either that version or
+  // the generic with `fallbackToGeneric: true`. It never 404s for a missing
+  // variant — only for an action with no in-effect generic either.
+  //
+  // Only set when non-empty. An empty `collector=` in the query string is a
+  // different question from omitting the parameter ("a collector whose name is
+  // blank" vs "no collector asked for"), and only the second one means generic.
+  //
+  // The value goes out AS TYPED. The server canonicalizes case itself, so
+  // lowercasing here would add a second place that can disagree with it — and
+  // if the two ever drift, the UI would be sending something other than what
+  // the operator typed and reading back an answer to a question they did not
+  // ask. Display is normalized instead (see src/lib/collector.ts).
+  resolveByAction(
+    action: string,
+    actionType: string,
+    opts?: { collector?: string; at?: string },
+  ) {
     const search = new URLSearchParams({ action, actionType });
-    if (at) search.set("at", at);
+    if (opts?.collector) search.set("collector", opts.collector);
+    if (opts?.at) search.set("at", opts.at);
     return request<TemplateContentResponse>(`/resolve?${search.toString()}`);
+  },
+
+  // Every collector's answer for one action pair, in one call.
+  //
+  // Same two required parameters as resolveByAction, and the same optional
+  // `at` — but a different QUESTION. `resolveByAction` asks about one client at
+  // a time and answers with a template; this asks about all of them at once and
+  // answers with who is served by their own variant, who falls through to the
+  // generic, and whether there is a generic to fall through to at all.
+  //
+  // `at` is only set when provided, for the same reason the collector is on
+  // resolveByAction: `at=` empty is not "now", it is an unparseable instant, and
+  // the server would have to guess. Omitted means now, which is the default the
+  // contract already states.
+  //
+  // NOT DEPLOYED YET on the running backend: this 404s there, and the ingress
+  // may answer with a bare non-JSON body. Callers must degrade rather than
+  // break — see useCollectorsInventory and the browse page's fallback.
+  collectorsInventory(
+    action: string,
+    actionType: string,
+    opts?: { at?: string },
+  ) {
+    const search = new URLSearchParams({ action, actionType });
+    if (opts?.at) search.set("at", opts.at);
+    return request<CollectorsInventoryResponse>(
+      `/collectors?${search.toString()}`,
+    );
   },
 
   // Rendering and validation are NOT here. The API stores templates and decides

@@ -3,6 +3,7 @@
 // component. See api-template/docs/INTEGRATION.md §7 for the source error taxonomy.
 import { ApiError } from "../api/templatesClient";
 import type { ApiErrorCode, TemplateStatus } from "../api/types";
+import { PreviewEngineError } from "../preview/client";
 
 export type UiErrorKind =
   | "VALIDATION_ERROR"
@@ -13,6 +14,7 @@ export type UiErrorKind =
   | "OBJECT_ALREADY_EXISTS"
   | "VALIDATOR_UNAVAILABLE"
   | "ENDPOINT_UNAVAILABLE"
+  | "PREVIEW_ENGINE"
   | "NETWORK"
   | "UNKNOWN";
 
@@ -37,26 +39,34 @@ const CODE_TO_KIND: Record<ApiErrorCode, UiErrorKind> = {
 };
 
 const DEFAULT_MESSAGES: Record<UiErrorKind, string> = {
-  VALIDATION_ERROR: "Some fields are invalid.",
-  INVALID_STATE_TRANSITION: "That action is not allowed in the template's current state.",
+  VALIDATION_ERROR: "Hay campos inválidos.",
+  INVALID_STATE_TRANSITION:
+    "Esa operación no está permitida en el estado actual de la plantilla.",
   // Names the way out, because there is one and it is not obvious: the version is
   // frozen, but authoring a new one costs nothing.
   VERSION_NOT_EDITABLE:
-    "This version is already published, so its content can no longer be changed. Create a new version instead.",
-  TEMPLATE_NOT_FOUND: "That template/version no longer exists.",
-  OBJECT_NOT_FOUND: "The referenced object no longer exists.",
-  OBJECT_ALREADY_EXISTS: "That object already exists.",
+    "Esta versión ya está publicada, así que su contenido no se puede seguir cambiando. Crea una versión nueva en su lugar.",
+  TEMPLATE_NOT_FOUND: "Esa plantilla o versión ya no existe.",
+  OBJECT_NOT_FOUND: "El objeto referenciado ya no existe.",
+  OBJECT_ALREADY_EXISTS: "Ese objeto ya existe.",
   // Deliberately says "not saved": the author's work is intact, the check just
   // could not run. Retrying once the service is back is the correct move, which
   // is why this is worth telling apart from a plain failure.
   VALIDATOR_UNAVAILABLE:
-    "The template checker is unavailable, so nothing was saved. Your work is not lost — try again in a moment.",
+    "El verificador de plantillas no está disponible, así que no se guardó nada. Tu trabajo no se perdió: vuelve a intentarlo en un momento.",
   // Names the deployment, because the template is not the problem and looking
   // for the fault in it is a wasted afternoon.
   ENDPOINT_UNAVAILABLE:
-    "The API does not serve this endpoint. The deployed backend is older than this UI — it needs to be redeployed.",
-  NETWORK: "Network error — the server is unreachable or the request was blocked (check CORS).",
-  UNKNOWN: "Unexpected error.",
+    "La API no expone este endpoint. El backend desplegado es más viejo que esta interfaz: hay que volver a desplegarlo.",
+  // Says "local", twice over, because the instinct on any failure next to a
+  // request is to go and look at the server — and here the server is not
+  // involved at all. Nothing is wrong with the template and nothing is wrong
+  // with the API: the renderer that runs in this browser tab did not start.
+  PREVIEW_ENGINE:
+    "El motor de vista previa local no pudo arrancar, así que no se pudo renderizar el mail. No es un problema del servidor ni de la plantilla: recarga la página para volver a arrancarlo.",
+  NETWORK:
+    "Error de red: no se puede llegar al servidor o la petición fue bloqueada (revisa CORS).",
+  UNKNOWN: "Error inesperado.",
 };
 
 /**
@@ -81,11 +91,22 @@ function fallbackKind(error: ApiError): UiErrorKind {
  * Maps any error thrown by templatesApi calls into a normalized UiError.
  *
  * - ApiError instances (typed non-2xx responses) branch on `error.body.error`.
+ * - PreviewEngineError is pulled out BEFORE the catch-all, because it is the one
+ *   failure in this app that has nothing to do with the network. It is thrown by
+ *   the local render worker (Pyodide never booted, an asset 404'd, the worker
+ *   died) and it is not an ApiError, so without this branch it fell through to
+ *   NETWORK and told the reader to go and check CORS about a request the server
+ *   had already answered perfectly. Every mutation that fetches and then renders
+ *   in one step can produce it.
  * - Anything else (fetch rejected: offline, DNS failure, CORS preflight blocked) is
  *   reported as a distinct NETWORK kind so the UI can tell "server said no" apart
  *   from "could not reach the server at all".
  */
 export function toUiError(error: unknown): UiError {
+  if (error instanceof PreviewEngineError) {
+    return { kind: "PREVIEW_ENGINE", message: DEFAULT_MESSAGES.PREVIEW_ENGINE };
+  }
+
   if (error instanceof ApiError) {
     const kind = CODE_TO_KIND[error.body.error] ?? fallbackKind(error);
 
@@ -100,7 +121,9 @@ export function toUiError(error: unknown): UiError {
     if (kind === "INVALID_STATE_TRANSITION") {
       return {
         kind,
-        message: `Cannot go ${error.body.from ?? "?"} → ${error.body.to ?? "?"}`,
+        // The two states are enum values off the wire, so they stay exactly as
+        // the server spelled them.
+        message: `No se puede pasar de ${error.body.from ?? "?"} a ${error.body.to ?? "?"}`,
         from: error.body.from,
         to: error.body.to,
       };

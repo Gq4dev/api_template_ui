@@ -19,6 +19,13 @@ export interface CreateTemplateRequest {
   html: string; // full HTML body
   subject?: string; // may contain {{placeholders}}
   variables?: string[]; // auto-derived from HTML when omitted
+  // Optional per-client OVERRIDE, not a third part of the identity. With it the
+  // derived key gains a `__collector` suffix and the version only reaches that
+  // client; without it this is the generic template every client falls back to.
+  // Omitted entirely when blank — an empty string is not "the generic", it is a
+  // collector whose name is empty, and the server would have to guess which was
+  // meant.
+  collector?: string;
 }
 
 export interface CreateTemplateResponse {
@@ -62,6 +69,10 @@ export interface CommitRequest {
   s3Key: string; // the s3Key returned by upload-url
   variables?: string[];
   subject?: string;
+  // Same override semantics as on create. Mode B commits the SAME kind of
+  // version as Mode A does, so leaving it off here would make the upload path
+  // quietly incapable of authoring a collector variant.
+  collector?: string;
 }
 
 // ---- Admin: publish / archive ----
@@ -80,6 +91,10 @@ export interface TemplateSummary {
   status: TemplateStatus;
   action: string;
   actionType: string;
+  // null on a generic row — the template every client gets when they have no
+  // variant of their own. Nullable rather than optional because the server
+  // always sends the field; the absence of a collector is stated, not implied.
+  collector: string | null;
   subject: string | null;
   effectiveFrom: string | null;
   effectiveTo: string | null;
@@ -101,6 +116,10 @@ export interface ListTemplatesParams {
   action?: string;
   actionType?: string;
   templateKey?: string;
+  // Partial match, case-insensitive — same contract as the other text filters,
+  // so "bbv" finds bbva. Absent means "no collector filter", which is NOT the
+  // same as "only generic rows": there is no way to ask for generics alone.
+  collector?: string;
   status?: TemplateStatus;
   page?: number; // 0-based
   size?: number;
@@ -108,11 +127,24 @@ export interface ListTemplatesParams {
 }
 
 // ---- Read: resolve ----
+//
+// Note what is NOT here: `fallbackToGeneric`. This is `GET /{templateKey}/resolve`,
+// which addresses a variant by a key that ALREADY contains the collector — ask
+// for `payment_approved__bbva` and you either get a version of that key or a
+// 404. There is no generic to fall back to, because you did not ask a question
+// that has two possible answers. A field that could only ever be `false` would
+// be noise, and worse: it would invite a reader to check it here and conclude
+// that fallback had been ruled out, when in fact it was never on the table.
+// Only `GET /resolve` (by action) can report a fallback, and only that response
+// type carries the flag.
 export interface ResolveResponse {
   templateKey: string;
   version: number;
   status: TemplateStatus;
   s3Key: string;
+  // Echoed back so the caller can render what it got without re-parsing the
+  // templateKey it sent. null when the key addressed a generic template.
+  collector: string | null;
   subject: string | null;
   variables: string[];
   effectiveFrom: string | null;
@@ -129,11 +161,116 @@ export interface TemplateContentResponse {
   status: TemplateStatus;
   action: string;
   actionType: string;
+  // The collector of the version ACTUALLY SERVED, which is not necessarily the
+  // one that was asked for — see fallbackToGeneric below.
+  collector: string | null;
   subject: string | null;
   variables: string[];
   html: string;
   effectiveFrom: string | null;
   effectiveTo: string | null;
+  /**
+   * True when a collector WAS requested and had no servable version, so the
+   * generic was served instead. Only `GET /resolve` (by action) can set it: it
+   * is the one call that asks a question with two possible answers.
+   *
+   * "Servable" means published AND inside its effectivity window. A variant
+   * that is DRAFT, archived, or scheduled for next month is not servable, and
+   * asking for it falls back just as silently as asking for one that was never
+   * authored — which is exactly why the flag has to be surfaced loudly. An
+   * operator looking at the generic while believing they are looking at
+   * Santander's variant will go and fix the wrong document.
+   */
+  fallbackToGeneric: boolean;
+}
+
+// ---- Read: collector inventory ----
+//
+// `GET /collectors?action=…&actionType=…&at=…` — one answer that covers every
+// client for one action pair, which is the question the browse cascade actually
+// asks and the catalogue could never answer.
+//
+// The catalogue can only report what was AUTHORED. This reports what is
+// SERVED, which is a different set: a collector with a draft variant is in the
+// catalogue and still receives the generic, and a collector with nothing at all
+// is absent from the catalogue while very much receiving something.
+export interface CollectorInventoryEntry {
+  /** The client this row is about. Always lowercase — the server canonicalizes. */
+  collector: string;
+  templateKey: string;
+  /**
+   * The version that would ACTUALLY BE SERVED at `at`, resolved by the same
+   * precedence the send path uses — never simply the highest number stored. A
+   * v4 scheduled for next month does not appear here while v3 is the one going
+   * out, because the question this endpoint answers is "what does this client
+   * get", not "what is the newest thing we wrote".
+   */
+  version: number;
+  /**
+   * Derived at `at`, never read from a stored column. SCHEDULED and ACTIVE are
+   * the same row read against the clock, which is why this field — and
+   * {@link CollectorInventoryEntry.servable} with it — can change with nobody
+   * writing to the database.
+   */
+  status: TemplateStatus;
+  /**
+   * Whether this collector's own variant is what the send path would put in
+   * the envelope. THE FIELD THAT MATTERS — existence is not delivery.
+   *
+   * A collector with nothing servable STILL APPEARS in the list, with
+   * `servable: false` and its latest version. Omitting it would hide exactly
+   * the problem worth seeing: somebody wrote a variant for this client, it is a
+   * draft, and the client is receiving the generic while everyone assumes
+   * otherwise. An absent row says "nobody ever wrote anything"; a row with
+   * `servable: false` says "somebody wrote something and it is not going out",
+   * and those two call for opposite next moves.
+   */
+  servable: boolean;
+}
+
+export interface CollectorsInventoryResponse {
+  action: string;
+  actionType: string;
+  /**
+   * The instant the whole answer was computed at — echoed back precisely
+   * because `status` and `servable` are derived against it.
+   *
+   * Worth rendering next to the list rather than hiding: the caller may have
+   * omitted `at` (meaning "now"), and "now" is already in the past by the time
+   * the answer is on screen. A UI that shows the list without saying when it
+   * was computed is quietly claiming the list is current forever.
+   */
+  at: string;
+  /**
+   * The fallback destination, and A SEPARATE FIELD ON PURPOSE — not an entry in
+   * `collectors` with a null collector.
+   *
+   * It is not a variant. Every entry in the list is one client's override; this
+   * is the template all the OTHER clients get, including every client that does
+   * not appear in the list at all. Flattening it into the array would make the
+   * reader treat "the baseline for everyone" as one row among the exceptions.
+   *
+   * NULL IS THE DANGEROUS CASE AND IT IS NOT A FALLBACK. `generic: null` means
+   * any collector without a servable version of its own gets a 404 — nothing is
+   * delivered. That is categorically worse than falling back to a baseline
+   * mail, and any UI reading this field has to tell the two apart: "this client
+   * receives the generic" and "this client receives nothing" are different
+   * sentences.
+   *
+   * `servable` is present here too, and it matters for the same reason: a
+   * generic that exists but is a draft (or archived, or scheduled for later)
+   * delivers nothing either. Existence is not delivery, for the generic as much
+   * as for a variant.
+   */
+  generic: Omit<CollectorInventoryEntry, "collector"> | null;
+  /**
+   * One entry per collector, never one per version, sorted by collector name in
+   * a stable order.
+   *
+   * An empty array is a NORMAL 200, not a 404: "this action pair has no
+   * per-collector variants" is an answer, and every client is on the generic.
+   */
+  collectors: CollectorInventoryEntry[];
 }
 
 // Preview and contract types used to live here. They described two endpoints
