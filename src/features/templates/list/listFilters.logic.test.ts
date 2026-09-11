@@ -21,10 +21,12 @@ describe("buildListParams", () => {
       status: "",
       templateKey: "   ",
       action: "",
+      collector: "  ",
     });
     expect(params).not.toHaveProperty("status");
     expect(params).not.toHaveProperty("templateKey");
     expect(params).not.toHaveProperty("action");
+    expect(params).not.toHaveProperty("collector");
   });
 
   it("includes trimmed filters when present", () => {
@@ -32,6 +34,7 @@ describe("buildListParams", () => {
       status: "ACTIVE",
       templateKey: " order-created ",
       action: " ORDER ",
+      collector: " BBVA ",
       page: 2,
       size: 50,
     });
@@ -39,6 +42,10 @@ describe("buildListParams", () => {
       status: "ACTIVE",
       templateKey: "order-created",
       action: "ORDER",
+      // Trimmed but not lowercased: the server matches case-insensitively and
+      // canonicalizes on its own, so normalizing here would only add a second
+      // place that can disagree with it.
+      collector: "BBVA",
       page: 2,
       size: 50,
       sort: DEFAULT_LIST_SORT,

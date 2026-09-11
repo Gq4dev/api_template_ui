@@ -24,8 +24,10 @@ import {
 } from "./listFilters.logic";
 import { TemplatesTable } from "./TemplatesTable";
 
+// The four status values are enum values off the wire and are never translated;
+// only the "no filter" entry is copy, so only that one is in Spanish.
 const STATUS_OPTIONS = [
-  { value: "", label: "All statuses" },
+  { value: "", label: "Todos los estados" },
   { value: "DRAFT", label: "DRAFT" },
   { value: "SCHEDULED", label: "SCHEDULED" },
   { value: "ACTIVE", label: "ACTIVE" },
@@ -106,7 +108,7 @@ export function ListPage() {
       <Group justify="space-between" align="center">
         <Title order={2}>Templates</Title>
         <Button component={Link} to="/create">
-          Create template
+          Crear plantilla
         </Button>
       </Group>
 
@@ -121,7 +123,7 @@ export function ListPage() {
         />
         <TextInput
           label="Template key"
-          description="Matches any part of the key"
+          description="Coincide con cualquier parte de la key"
           placeholder="payment"
           value={filters.templateKey}
           onChange={(event) =>
@@ -130,36 +132,49 @@ export function ListPage() {
         />
         <TextInput
           label="Action"
-          description="Matches any part of the action"
+          description="Coincide con cualquier parte de la Action"
           placeholder="payment"
           value={filters.action}
           onChange={(event) => updateFilter("action", event.currentTarget.value)}
         />
+        {/* Blank means "every row", generic and variant alike — not "only the
+            generic ones". There is no filter for generics alone, and the column
+            below is how you tell them apart. */}
+        <TextInput
+          label="Collector"
+          description="Coincide con cualquier parte del Collector"
+          placeholder="bbva"
+          value={filters.collector}
+          onChange={(event) =>
+            updateFilter("collector", event.currentTarget.value)
+          }
+        />
       </Group>
 
       {listError ? (
-        <Alert color="red" title="Could not load templates" mt="md">
+        <Alert color="red" title="No se pudieron cargar las plantillas" mt="md">
           {listError.message}
         </Alert>
       ) : null}
 
       {archiveError ? (
-        <Alert color="red" title="Could not archive version" mt="md">
+        <Alert color="red" title="No se pudo archivar la versión" mt="md">
           {archiveError.message}
         </Alert>
       ) : null}
 
       {publishError ? (
-        <Alert color="red" title="Could not publish version" mt="md">
+        <Alert color="red" title="No se pudo publicar la versión" mt="md">
           {publishError.message}
         </Alert>
       ) : null}
 
       {publishMutation.isSuccess && publishMutation.data ? (
-        <Alert color="green" title="Version published" mt="md">
+        <Alert color="green" title="Versión publicada" mt="md">
           <strong>{publishMutation.data.templateKey}</strong> v
-          {publishMutation.data.version} is now {publishMutation.data.status}. The
-          notification service will use it from here on.
+          {publishMutation.data.version} ahora está en{" "}
+          {publishMutation.data.status}. El servicio de notificaciones la usará de
+          aquí en adelante.
         </Alert>
       ) : null}
 

@@ -82,16 +82,16 @@ export function PreviewModal({
       <Stack gap="md">
         <Group justify="space-between" align="center">
           <Text size="xs" c="dimmed" maw="60%">
-            Rendered with the same engine and sample data that sending uses. An
-            optional field that arrives empty is shown empty.
+            Se renderiza con el mismo motor y los mismos datos de ejemplo que usa
+            el envío. Un campo opcional que llegue vacío se muestra vacío.
           </Text>
           <SegmentedControl
             size="xs"
             value={variant}
             onChange={(value) => onVariantChange(value as PreviewVariant)}
             data={[
-              { label: "Single", value: "single" },
-              { label: "Multi", value: "multi" },
+              { label: "Individual", value: "single" },
+              { label: "Múltiple", value: "multi" },
             ]}
           />
         </Group>
@@ -100,16 +100,16 @@ export function PreviewModal({
           <Group gap="xs">
             <Loader size="sm" />
             <Text size="sm" c="dimmed">
-              Rendering…
+              Renderizando…
             </Text>
           </Group>
         ) : null}
 
         {message ? (
-          <Alert color="red" title="Could not render this version">
+          <Alert color="red" title="No se pudo renderizar esta versión">
             <Stack gap={4}>
               <Text size="sm" ff={failure ? "monospace" : undefined}>
-                {failure?.line != null ? `line ${failure.line}: ` : ""}
+                {failure?.line != null ? `línea ${failure.line}: ` : ""}
                 {message}
               </Text>
               {details.map((detail) => (
@@ -119,8 +119,8 @@ export function PreviewModal({
               ))}
               {failure ? (
                 <Text size="xs" c="dimmed">
-                  This is a stored version, so it was saved in this state. If it
-                  is published, it is failing to send.
+                  Esta es una versión guardada, así que se guardó en este estado.
+                  Si está publicada, está fallando al enviarse.
                 </Text>
               ) : null}
             </Stack>

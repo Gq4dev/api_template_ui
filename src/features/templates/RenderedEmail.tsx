@@ -14,8 +14,14 @@ export function RenderedEmail({ subject, html, height = 480 }: RenderedEmailProp
   return (
     <Stack gap="xs">
       <Group gap="xs" align="center">
+        {/*
+          The LABEL stays English — `Subject` is the API's own field name and
+          the one printed on the create form — but the placeholder beside it is
+          a VALUE, standing in for the subject line a recipient would read, so
+          it is written in the same Spanish as the rest of the interface.
+        */}
         <Badge variant="light">Subject</Badge>
-        <Text size="sm">{subject ?? "(no subject)"}</Text>
+        <Text size="sm">{subject ?? "(sin asunto)"}</Text>
       </Group>
       <Paper withBorder radius="sm" p={0} style={{ overflow: "hidden" }}>
         {/*
@@ -26,7 +32,7 @@ export function RenderedEmail({ subject, html, height = 480 }: RenderedEmailProp
           is lost — and a pasted <script> is inert here instead of in a session.
         */}
         <iframe
-          title="Rendered email preview"
+          title="Vista previa del mail renderizado"
           srcDoc={html}
           sandbox=""
           style={{ width: "100%", height, border: 0, background: "#fff" }}
