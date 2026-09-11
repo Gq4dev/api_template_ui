@@ -93,6 +93,17 @@ export default defineConfig(({ mode }) => {
       allowOnly: false,
       // Component tests (CreatePage) render Mantine + Router into a DOM.
       environment: 'jsdom',
+      // Well above Vitest's 5 s default, because the component tests are not
+      // slow for a reason that will ever be fixed. userEvent types one
+      // character at a time and each keystroke repaints a controlled Mantine
+      // form, so a test that fills three fields and submits twice costs
+      // seconds of real work — and that cost scales with how many workers are
+      // competing for the CPU, not with anything the test does. At 5 s the
+      // heaviest of them passed alone and failed in a full run, which is the
+      // worst possible signal: a red suite that says nothing about the code.
+      // A generous ceiling still catches a genuine hang; it just stops
+      // reporting machine load as a test failure.
+      testTimeout: 30000,
       setupFiles: ['./src/test/setup.ts'],
       // Tests import modules that read import.meta.env.VITE_API_BASE_URL at load
       // time (api/config.ts now hard-fails when it is unset). Vitest runs in
