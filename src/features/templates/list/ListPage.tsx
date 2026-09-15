@@ -3,14 +3,14 @@ import { Link, useSearchParams } from "react-router-dom";
 import {
   Alert,
   Button,
-  Container,
   Group,
   Pagination,
+  Paper,
   Select,
   TextInput,
-  Title,
 } from "@mantine/core";
-import { AppHeader } from "../../../app/AppHeader";
+import { IconPlus } from "@tabler/icons-react";
+import { PageHeader } from "../../../app/PageHeader";
 import { useTemplatesList } from "../../../queries/useTemplatesList";
 import { useArchiveTemplate } from "../../../queries/useArchiveTemplate";
 import { usePublishTemplate } from "../../../queries/usePublishTemplate";
@@ -103,16 +103,23 @@ export function ListPage() {
   const totalPages = listQuery.data?.totalPages ?? 0;
 
   return (
-    <Container size="xl" py="xl">
-      <AppHeader />
-      <Group justify="space-between" align="center">
-        <Title order={2}>Templates</Title>
-        <Button component={Link} to="/create">
-          Crear plantilla
-        </Button>
-      </Group>
+    <>
+      <PageHeader
+        title="Listado"
+        description="Todas las versiones guardadas, con filtros por estado, key, Action y Collector."
+        actions={
+          <Button
+            component={Link}
+            to="/create"
+            leftSection={<IconPlus size={16} stroke={1.8} />}
+          >
+            Nueva plantilla
+          </Button>
+        }
+      />
 
-      <Group mt="md" align="flex-end" gap="md">
+      <Paper withBorder p="md">
+      <Group align="flex-end" gap="md" wrap="wrap">
         <Select
           label="Status"
           data={STATUS_OPTIONS}
@@ -150,6 +157,7 @@ export function ListPage() {
           }
         />
       </Group>
+      </Paper>
 
       {listError ? (
         <Alert color="red" title="No se pudieron cargar las plantillas" mt="md">
@@ -196,6 +204,6 @@ export function ListPage() {
           />
         </Group>
       ) : null}
-    </Container>
+    </>
   );
 }

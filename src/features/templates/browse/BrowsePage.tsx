@@ -4,7 +4,6 @@ import {
   Alert,
   Badge,
   Button,
-  Container,
   Group,
   Loader,
   Paper,
@@ -15,7 +14,8 @@ import {
   Title,
 } from "@mantine/core";
 import type { SelectProps } from "@mantine/core";
-import { AppHeader } from "../../../app/AppHeader";
+import { IconPlus } from "@tabler/icons-react";
+import { PageHeader } from "../../../app/PageHeader";
 import { useTemplatesList } from "../../../queries/useTemplatesList";
 import { useRowPreview } from "../../../queries/useRowPreview";
 import { useResolveByAction } from "../../../queries/useResolveByAction";
@@ -520,20 +520,26 @@ export function BrowsePage() {
   const rendered = result && result.ok ? result : null;
 
   return (
-    <Container size="lg" py="xl">
-      <AppHeader />
-      <Group justify="space-between" align="center">
-        <Title order={2}>Templates</Title>
-        <Button component={Link} to="/create">
-          Crear plantilla
-        </Button>
-      </Group>
+    <>
+      <PageHeader
+        title="Templates"
+        description="Identifica una plantilla por su terna y pregunta qué tenemos escrito o qué se envía hoy."
+        actions={
+          <Button
+            component={Link}
+            to="/create"
+            leftSection={<IconPlus size={16} stroke={1.8} />}
+          >
+            Nueva plantilla
+          </Button>
+        }
+      />
 
       {/*
         The question, asked once. Everything below is an answer to it, and each
         answer lives in a panel of its own that says which question it answered.
       */}
-      <Paper withBorder p="md" radius="md" mt="md">
+      <Paper withBorder p="md" radius="md">
         <Group align="flex-end" gap="md" wrap="wrap">
           {/*
             An empty catalogue and a catalogue still loading look identical in a
@@ -1418,6 +1424,6 @@ export function BrowsePage() {
           ) : null}
         </Stack>
       </Paper>
-    </Container>
+    </>
   );
 }

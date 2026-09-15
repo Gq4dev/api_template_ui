@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MantineProvider } from "@mantine/core";
 import { BrowserRouter } from "react-router-dom";
 import type { ReactNode } from "react";
+import { theme } from "./theme";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -15,7 +16,9 @@ const queryClient = new QueryClient({
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
-      <MantineProvider defaultColorScheme="light">
+      {/* "auto" follows the OS until the user picks one in the navbar toggle;
+          Mantine's default manager then remembers that choice in localStorage. */}
+      <MantineProvider theme={theme} defaultColorScheme="auto">
         <BrowserRouter>{children}</BrowserRouter>
       </MantineProvider>
     </QueryClientProvider>

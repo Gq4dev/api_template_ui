@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { Alert, Button, Container, Group, Stack, Text, Title } from "@mantine/core";
+import { Alert, Button, Group, Stack, Text } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useUpdateDraft } from "../../../queries/useUpdateDraft";
 import { useVersionContent } from "../../../queries/useVersionContent";
@@ -8,7 +8,7 @@ import { useVariableCatalogue } from "../../../queries/useVariableCatalogue";
 import { useJinjaPreview } from "../../../queries/useJinjaPreview";
 import { toUiError } from "../../../lib/errors";
 import type { PreviewVariant } from "../../../preview/protocol";
-import { AppHeader } from "../../../app/AppHeader";
+import { PageHeader } from "../../../app/PageHeader";
 import { CreateForm } from "../create/CreateForm";
 import {
   EMPTY_CREATE_FORM_VALUES,
@@ -209,20 +209,29 @@ export function EditDraftPage() {
     </Button>
   );
 
+  const header = (
+    <PageHeader
+      title="Editar borrador"
+      description={
+        loaded ? `${loaded.templateKey} v${loaded.version}` : `${templateKey} v${params.version ?? ""}`
+      }
+    />
+  );
+
   if (contentQuery.isLoading) {
     return (
-      <Container size="sm" py="xl">
-        <AppHeader />
+      <>
+        {header}
         <Text c="dimmed">Cargando el borrador…</Text>
-      </Container>
+      </>
     );
   }
 
   if (contentQuery.isError || !loaded) {
     return (
-      <Container size="sm" py="xl">
-        <AppHeader />
-        <Alert color="red" title="No se pudo cargar esta versión" mt="md">
+      <>
+        {header}
+        <Alert color="red" title="No se pudo cargar esta versión" maw={720}>
           <Stack gap="sm">
             <Text size="sm">
               {contentQuery.error
@@ -232,15 +241,15 @@ export function EditDraftPage() {
             <Group>{backToList}</Group>
           </Stack>
         </Alert>
-      </Container>
+      </>
     );
   }
 
   if (loaded.status !== "DRAFT") {
     return (
-      <Container size="sm" py="xl">
-        <AppHeader />
-        <Alert color="yellow" title="Esta versión ya no se puede editar" mt="md">
+      <>
+        {header}
+        <Alert color="yellow" title="Esta versión ya no se puede editar" maw={720}>
           <Stack gap="sm">
             <Text size="sm">
               <strong>{loaded.templateKey}</strong> v{loaded.version} está en{" "}
@@ -262,19 +271,16 @@ export function EditDraftPage() {
             </Group>
           </Stack>
         </Alert>
-      </Container>
+      </>
     );
   }
 
   return (
-    <Container size="sm" py="xl">
-      <AppHeader />
-      <Title order={2}>
-        Editar borrador — {loaded.templateKey} v{loaded.version}
-      </Title>
+    <>
+      {header}
 
       {mutation.isSuccess ? (
-        <Alert color="green" title="Borrador guardado" mt="md">
+        <Alert color="green" title="Borrador guardado">
           <Stack gap="sm">
             <Text size="sm">
               Sigue siendo un borrador y sigue sin estar en vivo. Publícalo desde
@@ -315,6 +321,6 @@ export function EditDraftPage() {
         onAuthorEmailChange={handleAuthorEmailChange}
         onSubmit={handleSubmit}
       />
-    </Container>
+    </>
   );
 }

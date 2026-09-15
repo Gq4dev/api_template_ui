@@ -1,6 +1,6 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Alert, Button, Container, Group, Stack, Text, Title } from "@mantine/core";
+import { Alert, Button, Group, Stack, Text } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useCreateTemplate } from "../../../queries/useCreateTemplate";
 import { useVariableCatalogue } from "../../../queries/useVariableCatalogue";
@@ -9,7 +9,7 @@ import { IdempotencyKeyManager } from "../../../lib/idempotency";
 import { toUiError } from "../../../lib/errors";
 import { collectorLabel } from "../../../lib/collector";
 import type { PreviewVariant } from "../../../preview/protocol";
-import { AppHeader } from "../../../app/AppHeader";
+import { PageHeader } from "../../../app/PageHeader";
 import { CreateForm } from "./CreateForm";
 import {
   EMPTY_CREATE_FORM_VALUES,
@@ -234,16 +234,22 @@ export function CreatePage() {
     setNetworkErrorMessage(null);
   }
 
+  const header = (
+    <PageHeader
+      title="Crear plantilla"
+      description="Escribe una plantilla nueva o una nueva versión. Todo se guarda como borrador hasta que lo publiques."
+    />
+  );
+
   if (mutation.isSuccess && mutation.data) {
     const { templateKey, version, status, checksum } = mutation.data;
 
     return (
-      <Container size="sm" py="xl">
-        <AppHeader />
-        <Title order={2}>Crear plantilla</Title>
+      <>
+        {header}
         {/* Blue, not green. A green "success" here would read as "done", and the
             author's job is not done: nothing reaches a customer until they publish. */}
-        <Alert color="blue" title="Borrador guardado — todavía no está en vivo" mt="md">
+        <Alert color="blue" title="Borrador guardado — todavía no está en vivo" maw={720}>
           <Stack gap="xs">
             {/* The collector rides next to the key, and says "Generic" when
                 there is none. Two drafts whose keys differ only by a
@@ -274,14 +280,13 @@ export function CreatePage() {
             </Group>
           </Stack>
         </Alert>
-      </Container>
+      </>
     );
   }
 
   return (
-    <Container size="sm" py="xl">
-      <AppHeader />
-      <Title order={2}>Crear plantilla</Title>
+    <>
+      {header}
       <CreateForm
         values={values}
         fieldErrors={fieldErrors}
@@ -307,6 +312,6 @@ export function CreatePage() {
         onAuthorEmailChange={handleAuthorEmailChange}
         onSubmit={handleSubmit}
       />
-    </Container>
+    </>
   );
 }
