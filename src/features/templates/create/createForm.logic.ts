@@ -2,7 +2,12 @@
 // construction, and mapping backend VALIDATION_ERROR details back onto form
 // fields. Kept separate from CreatePage/CreateForm so it is unit-testable
 // without React or a DOM.
-import type { CreateTemplateRequest } from "../../../api/types";
+import type {
+  CreateTemplateRequest,
+  TemplateContentResponse,
+  TemplateStatus,
+  TemplateSummary,
+} from "../../../api/types";
 import {
   COLLECTOR_FORMAT_MESSAGE,
   isValidCollector,
@@ -39,9 +44,14 @@ export const EMPTY_CREATE_FORM_VALUES: CreateFormValues = {
 
 /**
  * Builds the initial form values, prefilling the identity fields from the URL
- * query when present. This powers the "New version" flow from the list: those
- * fields land filled while html/subject stay blank (append-only — a new version
- * is authored from scratch, not copied).
+ * query when present. Two flows land here:
+ *
+ * - plain "New version" from the list: the identity lands filled while
+ *   html/subject stay blank — that version is authored from scratch;
+ * - "Create from this version": the same identity params PLUS a source address
+ *   (`fromKey`/`fromVersion`, see `fromVersionHref`). The identity is readable
+ *   here immediately; the content (html, subject) is copied by CreatePage once
+ *   the source version has been fetched, because a URL cannot carry a body.
  *
  * The READ half of a round trip whose write half is `newVersionHref` in
  * list/listFilters.logic.ts. Nothing but the parameter names ties the two
@@ -68,6 +78,128 @@ export function initialFormValues(
     collector: searchParams.get("collector") ?? "",
     templateKey: searchParams.get("templateKey") ?? "",
   };
+}
+
+// --- Create from an existing version ----------------------------------------
+
+export const SOURCE_KEY_PARAM = "fromKey";
+export const SOURCE_VERSION_PARAM = "fromVersion";
+
+/** The stored version a new template is being authored from. */
+export interface SourceAddress {
+  templateKey: string;
+  version: number;
+}
+
+/**
+ * Only published versions (in effect now, or scheduled to be) offer "create
+ * from". A draft is edited in place instead, and an archived version is not
+ * something anyone should be starting from by accident.
+ */
+export function isPublishedStatus(status: TemplateStatus): boolean {
+  return status === "ACTIVE" || status === "SCHEDULED";
+}
+
+/**
+ * The "Create from this version" link — the WRITE half of a round trip whose
+ * read half is `initialFormValues` (identity) plus `sourceAddressFromParams`
+ * (what to copy). Carries the identity alongside the address so the form shows
+ * the right Action/Action type/Collector before the content has arrived.
+ */
+export function fromVersionHref(
+  row: Pick<
+    TemplateSummary,
+    "templateKey" | "version" | "action" | "actionType" | "collector"
+  >,
+): string {
+  const search = new URLSearchParams({
+    templateKey: row.templateKey,
+    action: row.action,
+    actionType: row.actionType,
+    collector: row.collector ?? "",
+    [SOURCE_KEY_PARAM]: row.templateKey,
+    [SOURCE_VERSION_PARAM]: String(row.version),
+  });
+  return `/create?${search.toString()}`;
+}
+
+/**
+ * Reads the source address back off the URL. Anything short of a non-blank key
+ * and a positive integer version is "no source" rather than an error: the form
+ * is still perfectly usable from scratch, and a half-pasted link should land
+ * there instead of on a broken fetch.
+ */
+export function sourceAddressFromParams(
+  searchParams: URLSearchParams,
+): SourceAddress | null {
+  const templateKey = (searchParams.get(SOURCE_KEY_PARAM) ?? "").trim();
+  const rawVersion = searchParams.get(SOURCE_VERSION_PARAM) ?? "";
+  const version = Number(rawVersion);
+  if (!templateKey || rawVersion.trim() === "") return null;
+  if (!Number.isInteger(version) || version <= 0) return null;
+  return { templateKey, version };
+}
+
+/** Every form field copied from the fetched source version. */
+export function seedFromVersion(
+  content: Pick<
+    TemplateContentResponse,
+    "templateKey" | "action" | "actionType" | "collector" | "html" | "subject"
+  >,
+): CreateFormValues {
+  return {
+    action: content.action ?? "",
+    actionType: content.actionType ?? "",
+    collector: content.collector ?? "",
+    templateKey: content.templateKey,
+    html: content.html,
+    subject: content.subject ?? "",
+  };
+}
+
+type Identity = Pick<CreateFormValues, "action" | "actionType" | "collector">;
+
+function normalizeIdentityPart(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+/**
+ * Whether the form still names the same template as the source. Compared
+ * trimmed and case-insensitively, like the key the server derives from them:
+ * "ORDER" and "order " are one template, not two.
+ */
+export function identityMatchesSource(values: Identity, source: Identity): boolean {
+  return (
+    normalizeIdentityPart(values.action) === normalizeIdentityPart(source.action) &&
+    normalizeIdentityPart(values.actionType) === normalizeIdentityPart(source.actionType) &&
+    normalizeIdentityPart(values.collector) === normalizeIdentityPart(source.collector)
+  );
+}
+
+/**
+ * Keeps a copied templateKey from outliving the identity it belongs to.
+ *
+ * Seeded from the source, the key is correct only while the identity is the
+ * source's. Once the author changes Action or Action type, sending the old key
+ * would file a template for the new action under the old action's key — the
+ * mixed-action key the browse view warns about. So while the key is still the
+ * untouched copy it follows the identity: cleared (server derives it) when the
+ * identity diverges, restored when the author changes it back. A key the author
+ * typed themselves is never touched.
+ */
+export function detachSourceTemplateKey(
+  next: CreateFormValues,
+  source: CreateFormValues | null,
+): CreateFormValues {
+  if (!source) return next;
+  const matches = identityMatchesSource(next, source);
+  if (!matches && next.templateKey === source.templateKey) {
+    return { ...next, templateKey: "" };
+  }
+  if (matches && next.templateKey === "") {
+    return { ...next, templateKey: source.templateKey };
+  }
+  return next;
 }
 
 export type CreateFormFieldErrors = Partial<

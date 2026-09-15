@@ -1,28 +1,42 @@
 import { type FormEvent, useEffect, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
-import { Alert, Button, Group, Stack, Text } from "@mantine/core";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Alert, Button, Group, Skeleton, Stack, Text } from "@mantine/core";
 import { useDebouncedValue } from "@mantine/hooks";
 import { useCreateTemplate } from "../../../queries/useCreateTemplate";
 import { useVariableCatalogue } from "../../../queries/useVariableCatalogue";
 import { useJinjaPreview } from "../../../queries/useJinjaPreview";
+import { useVersionContent } from "../../../queries/useVersionContent";
 import { IdempotencyKeyManager } from "../../../lib/idempotency";
 import { toUiError } from "../../../lib/errors";
 import { collectorLabel } from "../../../lib/collector";
 import type { PreviewVariant } from "../../../preview/protocol";
 import { PageHeader } from "../../../app/PageHeader";
 import { CreateForm } from "./CreateForm";
+import { SourceVersionNotice } from "./SourceVersionNotice";
 import {
   EMPTY_CREATE_FORM_VALUES,
   buildCreatePayload,
   buildStarterTemplate,
+  detachSourceTemplateKey,
+  identityMatchesSource,
   initialFormValues,
+  isPublishedStatus,
   mapValidationDetails,
+  seedFromVersion,
+  sourceAddressFromParams,
   validateCreateForm,
   type CreateFormFieldErrors,
   type CreateFormValues,
+  type SourceAddress,
 } from "./createForm.logic";
 
 const AUTHOR_EMAIL_STORAGE_KEY = "api_template_ui.authorEmail";
+
+const IDENTITY_FIELDS = new Set<keyof CreateFormValues>([
+  "action",
+  "actionType",
+  "collector",
+]);
 
 function readStoredAuthorEmail(): string {
   try {
@@ -51,6 +65,7 @@ function persistAuthorEmail(value: string): void {
 export function CreatePage() {
   // Read the query params once on mount; later navigations don't re-seed state.
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [values, setValues] = useState<CreateFormValues>(() =>
     initialFormValues(searchParams),
   );
@@ -60,6 +75,53 @@ export function CreatePage() {
     string | null
   >(null);
   const [authorEmail, setAuthorEmail] = useState<string>(readStoredAuthorEmail);
+
+  // --- Create from an existing version ------------------------------------
+  // State rather than a constant so "Crear otra" can drop it: the next,
+  // unrelated create must not keep claiming it is based on this version.
+  const [source, setSource] = useState<SourceAddress | null>(() =>
+    sourceAddressFromParams(searchParams),
+  );
+  const sourceQuery = useVersionContent(
+    source?.templateKey ?? "",
+    source?.version ?? 0,
+  );
+  const sourceContent = source ? sourceQuery.data : undefined;
+  // What was copied, kept to compare the live identity against.
+  const [seed, setSeed] = useState<CreateFormValues | null>(null);
+
+  // Seeds the form ONCE per source address — same guard as EditDraftPage. The
+  // templates key space is invalidated by mutations, which refetches the source
+  // and hands back a new object; without the ref that refetch would overwrite
+  // everything the author has changed since the copy.
+  const seededFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (!sourceContent) return;
+    const address = `${sourceContent.templateKey}:${sourceContent.version}`;
+    if (seededFor.current === address) return;
+    seededFor.current = address;
+
+    // Only published content is a starting point. The link is only offered on
+    // ACTIVE/SCHEDULED rows, but a URL can be pasted: a draft is edited in
+    // place and an archived version is retired, so copying either would start
+    // the author from the wrong place. The notice explains; the form keeps the
+    // identity from the URL and nothing else.
+    if (!isPublishedStatus(sourceContent.status)) return;
+
+    const seeded = seedFromVersion(sourceContent);
+    setSeed(seeded);
+    setValues(seeded);
+  }, [sourceContent]);
+
+  const isSourceLoading = source !== null && sourceQuery.isLoading;
+  const unusableSourceStatus =
+    sourceContent && !isPublishedStatus(sourceContent.status)
+      ? sourceContent.status
+      : null;
+  const sourceErrorMessage =
+    source !== null && sourceQuery.isError
+      ? toUiError(sourceQuery.error).message
+      : null;
 
   // One manager per "logical" create attempt: current() mints a key on first
   // use and returns the same key across retries; reset() is called only on
@@ -152,7 +214,11 @@ export function CreatePage() {
     field: K,
     value: CreateFormValues[K],
   ) {
-    setValues((prev) => ({ ...prev, [field]: value }));
+    setValues((prev) => {
+      const next = { ...prev, [field]: value };
+      // Only identity edits can make a copied templateKey wrong.
+      return IDENTITY_FIELDS.has(field) ? detachSourceTemplateKey(next, seed) : next;
+    });
     setFieldErrors((prev) => {
       if (!(field in prev)) return prev;
       const next = { ...prev };
@@ -232,6 +298,12 @@ export function CreatePage() {
     setFieldErrors({});
     setGeneralErrors([]);
     setNetworkErrorMessage(null);
+    setSource(null);
+    setSeed(null);
+    // Drop the source (and its identity) from the URL too. State is read from
+    // the query only on mount, so this does not re-seed now — but left in
+    // place, a reload would bring the old version back into the blank form.
+    navigate("/create", { replace: true });
   }
 
   const header = (
@@ -287,31 +359,51 @@ export function CreatePage() {
   return (
     <>
       {header}
-      <CreateForm
-        values={values}
-        fieldErrors={fieldErrors}
-        generalErrors={generalErrors}
-        networkErrorMessage={networkErrorMessage}
-        authorEmail={authorEmail}
-        isSubmitting={mutation.isPending}
-        catalogue={catalogueQuery.data ?? null}
-        isCatalogueLoading={catalogueQuery.isFetching}
-        catalogueReady={catalogueReady}
-        canInsertStarter={canInsertStarter}
-        onInsertStarter={handleInsertStarter}
-        previewVariant={previewVariant}
-        preview={previewMutation.data ?? null}
-        previewEngineErrorMessage={previewEngineErrorMessage}
-        isRendering={previewMutation.isPending}
-        canRender={canRender}
-        onPreviewVariantChange={handlePreviewVariantChange}
-        onRenderPreview={handleRenderPreview}
-        live={live}
-        onLiveChange={setLive}
-        onFieldChange={handleFieldChange}
-        onAuthorEmailChange={handleAuthorEmailChange}
-        onSubmit={handleSubmit}
-      />
+      {source ? (
+        <SourceVersionNotice
+          source={source}
+          isLoading={isSourceLoading}
+          errorMessage={sourceErrorMessage}
+          unusableStatus={unusableSourceStatus}
+          identityMatches={seed ? identityMatchesSource(values, seed) : null}
+        />
+      ) : null}
+      {/* Skeleton instead of an editable form while the copy is on its way:
+          anything typed now would be overwritten by the seed a moment later. */}
+      {isSourceLoading ? (
+        <Stack gap="md" mt="md" aria-busy="true">
+          <Skeleton height={36} />
+          <Skeleton height={36} />
+          <Skeleton height={36} />
+          <Skeleton height={220} />
+        </Stack>
+      ) : (
+        <CreateForm
+          values={values}
+          fieldErrors={fieldErrors}
+          generalErrors={generalErrors}
+          networkErrorMessage={networkErrorMessage}
+          authorEmail={authorEmail}
+          isSubmitting={mutation.isPending}
+          catalogue={catalogueQuery.data ?? null}
+          isCatalogueLoading={catalogueQuery.isFetching}
+          catalogueReady={catalogueReady}
+          canInsertStarter={canInsertStarter}
+          onInsertStarter={handleInsertStarter}
+          previewVariant={previewVariant}
+          preview={previewMutation.data ?? null}
+          previewEngineErrorMessage={previewEngineErrorMessage}
+          isRendering={previewMutation.isPending}
+          canRender={canRender}
+          onPreviewVariantChange={handlePreviewVariantChange}
+          onRenderPreview={handleRenderPreview}
+          live={live}
+          onLiveChange={setLive}
+          onFieldChange={handleFieldChange}
+          onAuthorEmailChange={handleAuthorEmailChange}
+          onSubmit={handleSubmit}
+        />
+      )}
     </>
   );
 }

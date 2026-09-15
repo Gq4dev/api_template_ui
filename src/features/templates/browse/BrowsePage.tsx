@@ -16,6 +16,7 @@ import {
 import type { SelectProps } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
 import { PageHeader } from "../../../app/PageHeader";
+import { fromVersionHref, isPublishedStatus } from "../create/createForm.logic";
 import { useTemplatesList } from "../../../queries/useTemplatesList";
 import { useRowPreview } from "../../../queries/useRowPreview";
 import { useResolveByAction } from "../../../queries/useResolveByAction";
@@ -1027,6 +1028,18 @@ export function BrowsePage() {
                       Publicar
                     </Button>
                   </>
+                ) : null}
+                {/* Published content is frozen, so the way to build on it is a
+                    copy: same identity → next version, changed → new template. */}
+                {isPublishedStatus(selected.status) ? (
+                  <Button
+                    size="xs"
+                    variant="default"
+                    component={Link}
+                    to={fromVersionHref(selected)}
+                  >
+                    Crear a partir de esta versión
+                  </Button>
                 ) : null}
                 {selected.status !== "ARCHIVED" ? (
                   <Button

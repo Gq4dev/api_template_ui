@@ -7,7 +7,13 @@ import { newVersionHref } from "../list/listFilters.logic";
 import {
   EMPTY_CREATE_FORM_VALUES,
   buildCreatePayload,
+  detachSourceTemplateKey,
+  fromVersionHref,
+  identityMatchesSource,
   initialFormValues,
+  isPublishedStatus,
+  seedFromVersion,
+  sourceAddressFromParams,
   mapValidationDetails,
   buildStarterTemplate,
   validateCreateForm,
@@ -351,6 +357,143 @@ describe("initialFormValues", () => {
       action: "payment",
       actionType: "approved",
       collector: "",
+    });
+  });
+});
+
+describe("create from an existing version", () => {
+  const ROW = {
+    templateKey: "payment_approved__bbva",
+    version: 4,
+    action: "payment",
+    actionType: "approved",
+    collector: "bbva",
+  };
+
+  function paramsOf(href: string): URLSearchParams {
+    return new URLSearchParams(href.split("?")[1]);
+  }
+
+  it("offers it only for published statuses", () => {
+    expect(isPublishedStatus("ACTIVE")).toBe(true);
+    expect(isPublishedStatus("SCHEDULED")).toBe(true);
+    expect(isPublishedStatus("DRAFT")).toBe(false);
+    expect(isPublishedStatus("ARCHIVED")).toBe(false);
+  });
+
+  // Pinned against the real writer, like the New version round trip above.
+  it("round-trips the source address and the identity through the URL", () => {
+    const href = fromVersionHref(ROW);
+
+    expect(href.startsWith("/create?")).toBe(true);
+    expect(sourceAddressFromParams(paramsOf(href))).toEqual({
+      templateKey: "payment_approved__bbva",
+      version: 4,
+    });
+    expect(initialFormValues(paramsOf(href))).toEqual({
+      ...EMPTY_CREATE_FORM_VALUES,
+      templateKey: "payment_approved__bbva",
+      action: "payment",
+      actionType: "approved",
+      collector: "bbva",
+    });
+  });
+
+  it("writes a generic row's collector blank", () => {
+    const href = fromVersionHref({ ...ROW, templateKey: "payment_approved", collector: null });
+    expect(initialFormValues(paramsOf(href)).collector).toBe("");
+  });
+
+  it("reads a missing or malformed address as no source", () => {
+    expect(sourceAddressFromParams(new URLSearchParams())).toBeNull();
+    expect(sourceAddressFromParams(new URLSearchParams({ fromKey: "k" }))).toBeNull();
+    expect(
+      sourceAddressFromParams(new URLSearchParams({ fromKey: " ", fromVersion: "2" })),
+    ).toBeNull();
+    for (const bad of ["0", "-1", "1.5", "abc", " "]) {
+      expect(
+        sourceAddressFromParams(new URLSearchParams({ fromKey: "k", fromVersion: bad })),
+      ).toBeNull();
+    }
+  });
+
+  it("seeds every field from the fetched version", () => {
+    expect(
+      seedFromVersion({
+        templateKey: "order_created",
+        action: "ORDER",
+        actionType: "CREATED",
+        collector: null,
+        html: "<p>hi</p>",
+        subject: null,
+      }),
+    ).toEqual({
+      templateKey: "order_created",
+      action: "ORDER",
+      actionType: "CREATED",
+      collector: "",
+      html: "<p>hi</p>",
+      subject: "",
+    });
+  });
+
+  it("compares identity trimmed and case-insensitively", () => {
+    const source = { action: "ORDER", actionType: "CREATED", collector: "" };
+    expect(
+      identityMatchesSource({ action: " order", actionType: "created ", collector: "" }, source),
+    ).toBe(true);
+    expect(identityMatchesSource({ ...source, collector: "bbva" }, source)).toBe(false);
+    expect(identityMatchesSource({ ...source, action: "PAYMENT" }, source)).toBe(false);
+  });
+
+  describe("detachSourceTemplateKey", () => {
+    const SOURCE = {
+      ...EMPTY_CREATE_FORM_VALUES,
+      action: "ORDER",
+      actionType: "CREATED",
+      templateKey: "order_created",
+      html: "<p>x</p>",
+    };
+
+    it("is a no-op without a source", () => {
+      const next = { ...SOURCE, action: "PAYMENT" };
+      expect(detachSourceTemplateKey(next, null)).toBe(next);
+    });
+
+    it("keeps the copied key while the identity is unchanged", () => {
+      expect(detachSourceTemplateKey(SOURCE, SOURCE).templateKey).toBe("order_created");
+    });
+
+    // Otherwise a PAYMENT template would be filed under the ORDER key.
+    it("clears the copied key once the identity diverges, and restores it on the way back", () => {
+      const diverged = detachSourceTemplateKey({ ...SOURCE, action: "PAYMENT" }, SOURCE);
+      expect(diverged.templateKey).toBe("");
+
+      const back = detachSourceTemplateKey({ ...diverged, action: "ORDER" }, SOURCE);
+      expect(back.templateKey).toBe("order_created");
+    });
+
+    // A variant source turned back into the generic: same action pair, collector
+    // blanked. The copied `__bbva` key must not travel — the server derives the
+    // generic's key from action + actionType.
+    it("drops a variant's key when the collector is blanked, so the payload targets the generic", () => {
+      const variant = {
+        ...SOURCE,
+        collector: "bbva",
+        templateKey: "order_created__bbva",
+      };
+      const next = detachSourceTemplateKey({ ...variant, collector: "" }, variant);
+
+      expect(next.templateKey).toBe("");
+      const payload = buildCreatePayload(next);
+      expect(payload).not.toHaveProperty("templateKey");
+      expect(payload).not.toHaveProperty("collector");
+      expect(payload).toMatchObject({ action: "ORDER", actionType: "CREATED" });
+    });
+
+    it("never touches a key the author typed", () => {
+      const typed = { ...SOURCE, action: "PAYMENT", templateKey: "my_key" };
+      expect(detachSourceTemplateKey(typed, SOURCE).templateKey).toBe("my_key");
     });
   });
 });

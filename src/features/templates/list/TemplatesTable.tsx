@@ -16,6 +16,7 @@ import { collectorLabel } from "../../../lib/collector";
 import type { PreviewVariant } from "../../../preview/protocol";
 import { PreviewModal } from "./PreviewModal";
 import { newVersionHref, rowId } from "./listFilters.logic";
+import { fromVersionHref, isPublishedStatus } from "../create/createForm.logic";
 
 interface TemplatesTableProps {
   rows: TemplateSummary[];
@@ -218,6 +219,16 @@ export function TemplatesTable({
                       >
                         Nueva versión
                       </Button>
+                      {isPublishedStatus(row.status) ? (
+                        <Button
+                          size="xs"
+                          variant="default"
+                          component={Link}
+                          to={fromVersionHref(row)}
+                        >
+                          Crear a partir de esta versión
+                        </Button>
+                      ) : null}
                     </Group>
                   </Table.Td>
                 </Table.Tr>
