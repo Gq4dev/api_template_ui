@@ -7,6 +7,15 @@ import type { SelectOption, TemplateGroup } from "./browse.logic";
 import {
   COLLECTORS_KNOWN_ELSEWHERE,
   COLLECTORS_STORED_HERE,
+  EMPTY_BROWSE_SELECTION,
+  WITHOUT_OWN_VARIANT,
+  WITH_OWN_VARIANT,
+  catalogueCollectorNames,
+  collectorFirstActionData,
+  collectorFirstActionTypeData,
+  collectorFirstCollectorData,
+  selectDataValues,
+  switchBrowseMode,
   actionOptions,
   actionTypeOptions,
   catalogueCollectorData,
@@ -842,6 +851,192 @@ describe("identity cascade", () => {
       expect(findGroup(catalogue, "", "", "")).toBeNull();
       expect(findGroup(catalogue, "payment", "", "bbva")).toBeNull();
       expect(findGroup(catalogue, "", "approved", "bbva")).toBeNull();
+    });
+  });
+});
+
+describe("collector-first order", () => {
+  const catalogue = groupByTemplateKey([
+    row("payment_approved", 1, "ACTIVE", "payment", "approved"),
+    row("payment_approved__bbva", 1, "ACTIVE", "payment", "approved", "bbva"),
+    // Spelled differently on purpose: the server canonicalizes case, so these
+    // are one client and must be one option.
+    row("payment_pending__bbva_old", 1, "ARCHIVED", "payment", "pending", "BBVA"),
+    row("payment_rejected", 1, "ACTIVE", "payment", "rejected"),
+    row("withdrawal_create__santander", 1, "ACTIVE", "withdrawal", "create", "santander"),
+    row("refund_done__blank", 1, "ACTIVE", "refund", "done", "   "),
+  ]);
+
+  describe("catalogueCollectorNames", () => {
+    it("lists every distinct collector once, normalized, sorted, without blanks", () => {
+      expect(catalogueCollectorNames(catalogue)).toEqual(["bbva", "santander"]);
+    });
+
+    it("is empty for a catalogue of generics only", () => {
+      expect(catalogueCollectorNames(groupByTemplateKey([row("a_b", 1, "ACTIVE")]))).toEqual([]);
+    });
+  });
+
+  it("offers the generic first, then every stored collector", () => {
+    expect(collectorFirstCollectorData(catalogue)).toEqual([
+      { value: "", label: "Genérica" },
+      { value: "bbva", label: "bbva" },
+      { value: "santander", label: "santander" },
+    ]);
+  });
+
+  describe("collectorFirstActionData", () => {
+    // Every action stays: a client without a variant for an action still gets
+    // mail for it, so filtering would hide most of what that client receives.
+    it("lists ALL actions, split by whether the collector has a variant under any of their types", () => {
+      expect(collectorFirstActionData(catalogue, "bbva")).toEqual([
+        { group: WITH_OWN_VARIANT, items: [{ value: "payment", label: "payment" }] },
+        {
+          group: WITHOUT_OWN_VARIANT,
+          items: [
+            { value: "refund", label: "refund" },
+            { value: "withdrawal", label: "withdrawal" },
+          ],
+        },
+      ]);
+    });
+
+    it("matches the collector case-insensitively", () => {
+      expect(collectorFirstActionData(catalogue, " BBVA ")).toEqual(
+        collectorFirstActionData(catalogue, "bbva"),
+      );
+    });
+
+    it("drops an empty heading instead of drawing it", () => {
+      const onlyGenerics = groupByTemplateKey([row("payment_approved", 1, "ACTIVE")]);
+      expect(collectorFirstActionData(onlyGenerics, "bbva")).toEqual([
+        { group: WITHOUT_OWN_VARIANT, items: [{ value: "payment", label: "payment" }] },
+      ]);
+    });
+
+    it("reduces to the template-first options for the generic", () => {
+      expect(collectorFirstActionData(catalogue, "")).toEqual(actionOptions(catalogue));
+    });
+  });
+
+  describe("collectorFirstActionTypeData", () => {
+    it("lists every type of the action, marked for this exact pair", () => {
+      expect(collectorFirstActionTypeData(catalogue, "bbva", "payment")).toEqual([
+        {
+          group: WITH_OWN_VARIANT,
+          items: [
+            { value: "approved", label: "approved" },
+            { value: "pending", label: "pending" },
+          ],
+        },
+        { group: WITHOUT_OWN_VARIANT, items: [{ value: "rejected", label: "rejected" }] },
+      ]);
+    });
+
+    it("never leaks another action's types", () => {
+      expect(selectDataValues(collectorFirstActionTypeData(catalogue, "bbva", "withdrawal"))).toEqual([
+        "create",
+      ]);
+    });
+
+    it("is empty before an action is chosen, and plain for the generic", () => {
+      expect(collectorFirstActionTypeData(catalogue, "bbva", "")).toEqual([]);
+      expect(collectorFirstActionTypeData(catalogue, "", "payment")).toEqual(
+        actionTypeOptions(catalogue, "payment"),
+      );
+    });
+  });
+
+  it("flattens flat and grouped select data into values", () => {
+    expect(
+      selectDataValues([
+        { value: "", label: "Genérica" },
+        { group: "g", items: [{ value: "a", label: "A" }, "b"] },
+      ]),
+    ).toEqual(["", "a", "b"]);
+  });
+
+  describe("switchBrowseMode", () => {
+    const FULL = {
+      action: "payment",
+      actionType: "approved",
+      collector: "bbva",
+      collectorPicked: false,
+      version: 3,
+    };
+
+    describe("to COLLECTOR_FIRST", () => {
+      it("keeps the whole triple, version included, when the collector is offered", () => {
+        expect(switchBrowseMode(FULL, "COLLECTOR_FIRST", ["bbva", "santander"])).toEqual({
+          ...FULL,
+          collectorPicked: true,
+        });
+      });
+
+      // The generic is always offered: blank is an answer once the pair is.
+      it("keeps a generic triple", () => {
+        const generic = { ...FULL, collector: "" };
+        expect(switchBrowseMode(generic, "COLLECTOR_FIRST", [])).toEqual({
+          ...generic,
+          collectorPicked: true,
+        });
+      });
+
+      it("adopts the offered spelling so the Select does not render blank", () => {
+        expect(
+          switchBrowseMode({ ...FULL, collector: "BBVA" }, "COLLECTOR_FIRST", ["bbva"]).collector,
+        ).toBe("bbva");
+      });
+
+      // An action carried into an order whose first step is empty would be a
+      // filled, disabled field under an unanswered one.
+      it("clears everything when the pair is unanswered", () => {
+        expect(
+          switchBrowseMode({ ...FULL, actionType: "", version: null }, "COLLECTOR_FIRST", ["bbva"]),
+        ).toEqual(EMPTY_BROWSE_SELECTION);
+      });
+
+      it("clears everything when the collector is not offered", () => {
+        expect(switchBrowseMode(FULL, "COLLECTOR_FIRST", ["santander"])).toEqual(
+          EMPTY_BROWSE_SELECTION,
+        );
+      });
+    });
+
+    describe("to TEMPLATE_FIRST", () => {
+      const PICKED = { ...FULL, collectorPicked: true };
+
+      it("keeps the whole triple when the pair's list offers the collector", () => {
+        expect(switchBrowseMode(PICKED, "TEMPLATE_FIRST", ["", "bbva"])).toEqual(FULL);
+      });
+
+      it("lands on the generic, without a version, when the collector is not offered", () => {
+        expect(switchBrowseMode(PICKED, "TEMPLATE_FIRST", ["", "santander"])).toEqual({
+          ...EMPTY_BROWSE_SELECTION,
+          action: "payment",
+          actionType: "approved",
+        });
+      });
+
+      it("keeps an action alone, and drops a collector chosen ahead of it", () => {
+        expect(
+          switchBrowseMode(
+            { ...EMPTY_BROWSE_SELECTION, action: "payment", collector: "bbva", collectorPicked: true },
+            "TEMPLATE_FIRST",
+            ["bbva"],
+          ),
+        ).toEqual({ ...EMPTY_BROWSE_SELECTION, action: "payment" });
+      });
+
+      it("clears a collector-only selection", () => {
+        expect(
+          switchBrowseMode(
+            { ...EMPTY_BROWSE_SELECTION, collector: "bbva", collectorPicked: true },
+            "TEMPLATE_FIRST",
+            ["bbva"],
+          ),
+        ).toEqual(EMPTY_BROWSE_SELECTION);
+      });
     });
   });
 });

@@ -32,6 +32,10 @@ import {
   actionOptions,
   actionTypeOptions,
   catalogueCollectorData,
+  catalogueCollectorNames,
+  collectorFirstActionData,
+  collectorFirstActionTypeData,
+  collectorFirstCollectorData,
   collectorSource,
   defaultVersion,
   findGroup,
@@ -43,7 +47,10 @@ import {
   inventoryFreshness,
   resolutionMatchesSelection,
   resolutionOutcome,
+  selectDataValues,
+  switchBrowseMode,
   versionOptions,
+  type BrowseMode,
 } from "./browse.logic";
 
 // One page big enough to hold the whole catalogue. The cascade needs every key
@@ -149,6 +156,12 @@ export function BrowsePage() {
   const [collector, setCollector] = useState("");
   const [version, setVersion] = useState<number | null>(null);
   const [variant, setVariant] = useState<PreviewVariant>("single");
+  // The order the card asks in. Not persisted: nothing else on this page lives
+  // in the URL, and one setting that did would be the odd one out.
+  const [mode, setMode] = useState<BrowseMode>("TEMPLATE_FIRST");
+  // Collector-first only: whether the Collector step, which comes first there,
+  // has been answered. See `BrowseSelection.collectorPicked`.
+  const [collectorPicked, setCollectorPicked] = useState(false);
 
   const rows = useMemo(() => listQuery.data?.content ?? [], [listQuery.data]);
   const groups = useMemo(() => groupByTemplateKey(rows), [rows]);
@@ -214,6 +227,22 @@ export function BrowsePage() {
         ? inventoryCollectorData(inventory.collectors)
         : catalogueCollectorData(groups, action, actionType),
     [inventory, groups, action, actionType],
+  );
+
+  // The collector-first order's options. Catalogue-derived by necessity — see
+  // `catalogueCollectorNames` — and the page says so under the controls.
+  const catalogueCollectors = useMemo(() => catalogueCollectorNames(groups), [groups]);
+  const collectorFirstCollectors = useMemo(
+    () => collectorFirstCollectorData(groups),
+    [groups],
+  );
+  const collectorFirstActions = useMemo(
+    () => (collectorPicked ? collectorFirstActionData(groups, collector) : []),
+    [groups, collector, collectorPicked],
+  );
+  const collectorFirstActionTypes = useMemo(
+    () => collectorFirstActionTypeData(groups, collector, action),
+    [groups, collector, action],
   );
 
   // The entry behind each option, for the option renderer. Keyed rather than
@@ -331,17 +360,48 @@ export function BrowsePage() {
     `data` as a blank box rather than as an error. Clearing it lands on the
     generic instead, which is a legitimate answer and not an empty control.
   */
+  /*
+    In the collector-first order the collector sits ABOVE action and action type,
+    so those two steps must not clear it — the reset still runs downward, it is
+    only the direction of "downward" that changed. Changing the collector there
+    keeps action and action type: every action is offered under every collector,
+    so both are still valid, and only the version (which belongs to one stored
+    key) has to go.
+  */
   function chooseAction(value: string) {
     setAction(value);
     setActionType("");
-    setCollector("");
+    if (mode === "TEMPLATE_FIRST") setCollector("");
     setVersion(null);
   }
 
   function chooseActionType(value: string) {
     setActionType(value);
-    setCollector("");
+    if (mode === "TEMPLATE_FIRST") setCollector("");
     setVersion(null);
+  }
+
+  function chooseCollectorFirst(value: string) {
+    setCollector(value);
+    setCollectorPicked(true);
+    setVersion(null);
+  }
+
+  // What survives the switch is decided by `switchBrowseMode`; the page only
+  // tells it what the destination order will offer for the collector step.
+  function chooseMode(next: BrowseMode) {
+    if (next === mode) return;
+    const kept = switchBrowseMode(
+      { action, actionType, collector, collectorPicked, version },
+      next,
+      next === "COLLECTOR_FIRST" ? catalogueCollectors : selectDataValues(collectorData),
+    );
+    setMode(next);
+    setAction(kept.action);
+    setActionType(kept.actionType);
+    setCollector(kept.collector);
+    setCollectorPicked(kept.collectorPicked);
+    setVersion(kept.version);
   }
 
   /*
@@ -541,7 +601,23 @@ export function BrowsePage() {
         answer lives in a panel of its own that says which question it answered.
       */}
       <Paper withBorder p="md" radius="md">
+        <Group gap="sm" mb="md">
+          <Text size="sm" c="dimmed">
+            Buscar
+          </Text>
+          <SegmentedControl
+            size="xs"
+            value={mode}
+            onChange={(value) => chooseMode(value as BrowseMode)}
+            data={[
+              { label: "Por plantilla", value: "TEMPLATE_FIRST" },
+              { label: "Por collector", value: "COLLECTOR_FIRST" },
+            ]}
+          />
+        </Group>
         <Group align="flex-end" gap="md" wrap="wrap">
+          {mode === "TEMPLATE_FIRST" ? (
+            <>
           {/*
             An empty catalogue and a catalogue still loading look identical in a
             dropdown — both are a box with nothing in it — and the reader's next
@@ -669,6 +745,60 @@ export function BrowsePage() {
             nothingFoundMessage="Ningún collector coincide"
             w={220}
           />
+            </>
+          ) : (
+            <>
+              {/*
+                COLLECTOR FIRST. Same three values, asked in the other order.
+                The collector list is catalogue-derived (no endpoint lists every
+                client), which the hint under the row says out loud.
+              */}
+              <Select
+                label="Collector"
+                placeholder={listQuery.isLoading ? "Cargando…" : "Selecciona un collector"}
+                data={collectorFirstCollectors}
+                value={collectorPicked ? collector : null}
+                onChange={(value) => chooseCollectorFirst(value ?? "")}
+                searchable
+                allowDeselect={false}
+                nothingFoundMessage="Ningún collector coincide"
+                disabled={listQuery.isLoading}
+                w={220}
+              />
+              {/* Wider dropdown for the same reason as the collector list in the
+                  other order: the headings must not be ellipsed away. */}
+              <Select
+                label="Action"
+                placeholder={
+                  collectorPicked ? "Selecciona una acción" : "Selecciona primero Collector"
+                }
+                data={collectorFirstActions}
+                value={action === "" ? null : action}
+                onChange={(value) => chooseAction(value ?? "")}
+                searchable
+                allowDeselect={false}
+                nothingFoundMessage="Ninguna acción coincide"
+                disabled={!collectorPicked}
+                comboboxProps={{ width: 280, position: "bottom-start" }}
+                w={220}
+              />
+              <Select
+                label="Action type"
+                placeholder={
+                  action === "" ? "Selecciona primero Action" : "Selecciona un tipo"
+                }
+                data={collectorFirstActionTypes}
+                value={actionType === "" ? null : actionType}
+                onChange={(value) => chooseActionType(value ?? "")}
+                searchable
+                allowDeselect={false}
+                nothingFoundMessage="Ningún tipo coincide"
+                disabled={action === ""}
+                comboboxProps={{ width: 280, position: "bottom-start" }}
+                w={220}
+              />
+            </>
+          )}
           {/*
             Placeholders, not an empty box. A version select with nothing in it
             reads as a control that is broken or still loading; these two say
@@ -706,6 +836,15 @@ export function BrowsePage() {
           />
         </Group>
 
+        {/* Below the row, not as the field's description, for the alignment
+            reason spelled out in the next comment. */}
+        {mode === "COLLECTOR_FIRST" ? (
+          <Text size="xs" c="dimmed" mt="sm">
+            Solo se listan los collectors con al menos una variante guardada en el
+            catálogo: un cliente sin nada escrito no aparece en esta lista.
+          </Text>
+        ) : null}
+
         {/*
           EVERYTHING THE COLLECTOR STEP HAS TO SAY LIVES OUT HERE, NOT IN THE
           FIELD'S `description`.
@@ -729,7 +868,9 @@ export function BrowsePage() {
           was true when it was fetched, and the honest way to say that is to
           print the server's instant rather than the word "ahora".
         */}
-        {source === "INVENTORY" && inventory ? (
+        {/* Both notices below describe the template-first collector list; the
+            collector-first list is always catalogue-derived and has its hint. */}
+        {mode === "TEMPLATE_FIRST" && source === "INVENTORY" && inventory ? (
           <Text size="xs" c="dimmed" mt="sm">
             Inventario de collectors vigente al {formatInstant(inventory.at)}
             {inventory.collectors.length === 1
@@ -779,7 +920,7 @@ export function BrowsePage() {
           as served or not served — because a shorter list that looks the same
           as the complete one is the failure mode worth spending words on.
         */}
-        {source === "CATALOGUE_FALLBACK" ? (
+        {mode === "TEMPLATE_FIRST" && source === "CATALOGUE_FALLBACK" ? (
           <Alert
             color="gray"
             variant="light"

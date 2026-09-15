@@ -364,6 +364,267 @@ export function catalogueCollectorData(
   ];
 }
 
+// --- Collector-first browsing ----------------------------------------------
+//
+// The same triple, asked in a different order: Collector → Action → Action type.
+// It exists for the question an operator brings from a client's ticket — "what
+// does bbva get?" — where the client is the one thing they know for sure and the
+// action is what they still have to find. Nothing downstream changes: the
+// version select, the resolution, and every button that acts on a version still
+// receive exactly (action, actionType, collector). Only the ENTRY ORDER differs.
+
+/** Which order the selection card asks its questions in. */
+export type BrowseMode =
+  /** Action → Action type → Collector. The default, and the original order. */
+  | "TEMPLATE_FIRST"
+  /** Collector → Action → Action type. */
+  | "COLLECTOR_FIRST";
+
+/**
+ * The two headings the Action and Action type steps are split under once a
+ * named collector is chosen.
+ *
+ * "Sin variante propia" and deliberately NOT "Usa la genérica". The catalogue
+ * can say whether this collector has something STORED under an action; it
+ * cannot say that a servable generic exists to fall back to — that is the
+ * inventory's `generic` field, and the red alert on the page is where a missing
+ * one is announced. A heading promising the generic would be the list claiming
+ * a delivery it has no way to know about.
+ *
+ * "Con variante propia" means stored, not served: a draft variant counts. The
+ * version select further down is where the status is read.
+ */
+export const WITH_OWN_VARIANT = "Con variante propia";
+export const WITHOUT_OWN_VARIANT = "Sin variante propia";
+
+/** Headed options in Mantine's grouped shape, with value/label items. */
+export interface SelectOptionGroup {
+  group: string;
+  items: SelectOption[];
+}
+
+export type GroupedSelectData = Array<SelectOption | SelectOptionGroup>;
+
+/**
+ * Every distinct collector name in the stored catalogue, normalized and sorted.
+ *
+ * THE ONLY SOURCE THE COLLECTOR-FIRST ORDER HAS. `GET /collectors` answers per
+ * action pair, and in this order no pair has been chosen yet, so there is no
+ * endpoint to ask "which clients exist?". The catalogue is the honest fallback
+ * and the page says what it omits: a client nobody authored anything for is
+ * absent here, exactly as it is from {@link catalogueCollectorGroups}.
+ *
+ * Deduped by the same rules as that function — normalized, because `BBVA` and
+ * `bbva` are one client, and with whitespace-only names dropped, because those
+ * are the generic wearing spaces and would duplicate the blank option's value.
+ */
+export function catalogueCollectorNames(groups: TemplateGroup[]): string[] {
+  const names = new Set<string>();
+  for (const group of groups) {
+    if (group.collector == null) continue;
+    const name = normalizeCollector(group.collector);
+    if (name !== "") names.add(name);
+  }
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * The first step of the collector-first order: the generic, then every name.
+ *
+ * The generic is first for the same reason it is first in the other order — it
+ * is the one entry that is always a meaningful question — and it is the same
+ * option object, so both orders agree on its value and label.
+ */
+export function collectorFirstCollectorData(groups: TemplateGroup[]): SelectOption[] {
+  return [
+    GENERIC_COLLECTOR_OPTION,
+    ...catalogueCollectorNames(groups).map((name) => ({ value: name, label: name })),
+  ];
+}
+
+function hasVariantFor(
+  group: TemplateGroup,
+  collector: string,
+): boolean {
+  return group.collector != null && normalizeCollector(group.collector) === collector;
+}
+
+/**
+ * Splits values into the two headings, dropping an empty one.
+ *
+ * An empty heading is dropped for the reason given in
+ * {@link catalogueCollectorGroups}: Mantine draws the heading anyway, and a lone
+ * "Con variante propia" with nothing under it asserts the opposite of the truth.
+ */
+function markByVariant(
+  values: string[],
+  hasVariant: (value: string) => boolean,
+): SelectOptionGroup[] {
+  const withOwn: SelectOption[] = [];
+  const without: SelectOption[] = [];
+  for (const value of values) {
+    (hasVariant(value) ? withOwn : without).push({ value, label: value });
+  }
+  const data: SelectOptionGroup[] = [];
+  if (withOwn.length > 0) data.push({ group: WITH_OWN_VARIANT, items: withOwn });
+  if (without.length > 0) data.push({ group: WITHOUT_OWN_VARIANT, items: without });
+  return data;
+}
+
+/**
+ * The Action step once a collector is chosen.
+ *
+ * EVERY ACTION, not only the ones this collector has a variant for. A client
+ * with no variant for an action still receives mail for it — through the
+ * generic — so hiding those actions would hide most of what the client actually
+ * gets, and the send-path panel is precisely the tool for asking about them.
+ * The headings carry the distinction instead of the filter.
+ *
+ * An action lands under "Con variante propia" when the collector has a variant
+ * for AT LEAST ONE of its action types; the next step says which.
+ *
+ * Plain names, no counts. The counts in {@link actionOptions} count keys across
+ * every collector, which under a chosen collector would describe other clients'
+ * templates and read as a statement about this one.
+ *
+ * The GENERIC collector reduces to the template-first options exactly: with no
+ * collector there is no variant to mark, and the generic path is today's path.
+ */
+export function collectorFirstActionData(
+  groups: TemplateGroup[],
+  collector: string,
+): GroupedSelectData {
+  const name = normalizeCollector(collector);
+  if (name === "") return actionOptions(groups);
+
+  const actions = [...new Set(groups.map((group) => group.action))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+  return markByVariant(actions, (action) =>
+    groups.some((group) => group.action === action && hasVariantFor(group, name)),
+  );
+}
+
+/**
+ * The Action type step under a chosen collector and action — same rules one
+ * level down: every type of the action, marked by whether this collector has a
+ * variant stored for that exact pair. Empty until an action is chosen.
+ */
+export function collectorFirstActionTypeData(
+  groups: TemplateGroup[],
+  collector: string,
+  action: string,
+): GroupedSelectData {
+  if (action === "") return [];
+  const name = normalizeCollector(collector);
+  if (name === "") return actionTypeOptions(groups, action);
+
+  const underAction = groups.filter((group) => group.action === action);
+  const types = [...new Set(underAction.map((group) => group.actionType))].sort((a, b) =>
+    a.localeCompare(b),
+  );
+  return markByVariant(types, (actionType) =>
+    underAction.some((group) => group.actionType === actionType && hasVariantFor(group, name)),
+  );
+}
+
+/** Every selectable value in flat or grouped Select data, in order. */
+export function selectDataValues(
+  data: Array<SelectOption | { group: string; items: Array<SelectOption | string> }>,
+): string[] {
+  return data.flatMap((entry) =>
+    "group" in entry
+      ? entry.items.map((item) => (typeof item === "string" ? item : item.value))
+      : [entry.value],
+  );
+}
+
+/** What the selection card holds, independent of the order it was asked in. */
+export interface BrowseSelection {
+  action: string;
+  actionType: string;
+  /** `""` is the generic, as everywhere else on this page. */
+  collector: string;
+  /**
+   * Whether the Collector step has been answered. Only the collector-first
+   * order needs it: there the collector comes FIRST, so a blank can mean either
+   * "the generic" or "not asked yet", and the control has to tell them apart
+   * the same way the template-first order does with its `null` value.
+   */
+  collectorPicked: boolean;
+  version: number | null;
+}
+
+export const EMPTY_BROWSE_SELECTION: BrowseSelection = {
+  action: "",
+  actionType: "",
+  collector: "",
+  collectorPicked: false,
+  version: null,
+};
+
+/**
+ * What survives a switch between the two orders.
+ *
+ * THE RULE: keep the longest prefix of the selection that is still answered and
+ * still offered IN THE NEW ORDER, and clear everything after it. The version is
+ * kept only when the whole triple is.
+ *
+ * Why a prefix and not "keep whatever is set". Each order disables a step until
+ * the one before it is answered. Carrying an action into the collector-first
+ * order with no collector chosen would leave a filled, disabled field under an
+ * empty one — a half-selection that looks answered and cannot be edited. The
+ * prefix rule makes that state unreachable by construction.
+ *
+ * Concretely:
+ *
+ * - To COLLECTOR_FIRST the collector is the first step, and in the template
+ *   order it is only an answer once the pair above it is. So: the full triple
+ *   survives when the pair is answered and the collector is offered; otherwise
+ *   nothing does.
+ * - To TEMPLATE_FIRST the action is first. An action alone survives; an action
+ *   and type survive; the collector survives on top of them only if the new
+ *   order offers it. When it is not offered the collector lands on the generic —
+ *   the same thing choosing an action type does in that order — rather than on a
+ *   value its Select would render as a blank box.
+ *
+ * `availableCollectors` is what the DESTINATION order will offer for the
+ * collector step: the catalogue names for the collector-first order, the pair's
+ * current list for the template-first one. The kept collector is replaced by the
+ * offered spelling, because a Mantine Select whose value is not one of its
+ * option values renders blank even when the two differ only in case.
+ */
+export function switchBrowseMode(
+  selection: BrowseSelection,
+  to: BrowseMode,
+  availableCollectors: string[],
+): BrowseSelection {
+  const wanted = normalizeCollector(selection.collector);
+  const offered =
+    wanted === ""
+      ? ""
+      : availableCollectors.find((name) => normalizeCollector(name) === wanted);
+  const pairAnswered = selection.action !== "" && selection.actionType !== "";
+
+  if (to === "COLLECTOR_FIRST") {
+    if (!pairAnswered || offered === undefined) return EMPTY_BROWSE_SELECTION;
+    return { ...selection, collector: offered, collectorPicked: true };
+  }
+
+  if (selection.action === "") return EMPTY_BROWSE_SELECTION;
+  if (selection.actionType === "") {
+    return { ...EMPTY_BROWSE_SELECTION, action: selection.action };
+  }
+  if (offered === undefined) {
+    return {
+      ...EMPTY_BROWSE_SELECTION,
+      action: selection.action,
+      actionType: selection.actionType,
+    };
+  }
+  return { ...selection, collector: offered, collectorPicked: false };
+}
+
 /**
  * Where the Collector options are coming from — which is a statement about how
  * much the page is entitled to claim, not a loading flag.
