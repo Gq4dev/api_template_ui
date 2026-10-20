@@ -54,7 +54,8 @@ function row(
     actionType,
     collector,
     subject: null,
-    effectiveFrom: null,
+    // Published rows always carry a start: resolve never serves one without it.
+    effectiveFrom: "2026-01-01T00:00:00Z",
     effectiveTo: null,
     createdBy: "seed",
     createdAt: "2026-01-01T00:00:00Z",

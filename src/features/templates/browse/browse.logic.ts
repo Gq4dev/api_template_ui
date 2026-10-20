@@ -1198,6 +1198,9 @@ export interface CollectorsInventory {
  * An ARCHIVED row may be one that simply expired — the list says ARCHIVED for
  * both. That is safe because `at` is never earlier than the fetch: a window
  * that had closed then is still closed now.
+ *
+ * A published row with no `effectiveFrom` is reported as stored, as the server
+ * does — but that is a STATUS, not delivery: see `isServableAt`.
  */
 export function statusAtInstant(row: TemplateSummary, at: number): TemplateStatus {
   if (row.status === "DRAFT" || row.status === "ARCHIVED") return row.status;
@@ -1205,6 +1208,19 @@ export function statusAtInstant(row: TemplateSummary, at: number): TemplateStatu
   if (at < Date.parse(row.effectiveFrom)) return "SCHEDULED";
   if (row.effectiveTo != null && at >= Date.parse(row.effectiveTo)) return "ARCHIVED";
   return "ACTIVE";
+}
+
+/**
+ * Whether the send path would serve `row` at `at`.
+ *
+ * ACTIVE at `at` AND with a start. The server's resolve filters on
+ * `effective_from <= at`, and that comparison never matches a null, so an
+ * ACTIVE (or SCHEDULED) row stored without `effective_from` is never served —
+ * even though `statusAtInstant` reports it as ACTIVE, like the server's
+ * `statusAt` does.
+ */
+export function isServableAt(row: TemplateSummary, at: number): boolean {
+  return row.effectiveFrom != null && statusAtInstant(row, at) === "ACTIVE";
 }
 
 /**
@@ -1216,18 +1232,19 @@ function inventoryEntryFor(
   versions: TemplateSummary[],
   at: number,
 ): Omit<CollectorInventoryEntry, "collector"> {
-  const effectiveFrom = (row: TemplateSummary) =>
-    row.effectiveFrom == null ? Number.NEGATIVE_INFINITY : Date.parse(row.effectiveFrom);
-
   let served: TemplateSummary | null = null;
+  let servedFrom = Number.NEGATIVE_INFINITY;
   for (const row of versions) {
-    if (statusAtInstant(row, at) !== "ACTIVE") continue;
+    // `isServableAt` already guarantees a start; the check narrows the type.
+    if (!isServableAt(row, at) || row.effectiveFrom == null) continue;
+    const from = Date.parse(row.effectiveFrom);
     if (
       served == null ||
-      effectiveFrom(row) > effectiveFrom(served) ||
-      (effectiveFrom(row) === effectiveFrom(served) && row.version > served.version)
+      from > servedFrom ||
+      (from === servedFrom && row.version > served.version)
     ) {
       served = row;
+      servedFrom = from;
     }
   }
   if (served) {

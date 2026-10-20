@@ -22,6 +22,7 @@ import {
   capSpellings,
   mergeInventoryAnswers,
   inventoryFromCatalogue,
+  isServableAt,
   statusAtInstant,
   MAX_QUERIED_SPELLINGS,
   actionOptions,
@@ -1434,6 +1435,33 @@ describe("inventoryFromCatalogue", () => {
       inventoryFromCatalogue(rows, { action: "PAYMENT", actionType: "approved" }, FETCHED, NOW, false)
         .generic,
     ).not.toBeNull();
+  });
+
+  // The server's resolve filters on effective_from <= at, which never matches a
+  // null: a published row without a start is reported as stored but never served.
+  it("never serves an ACTIVE or SCHEDULED row without effectiveFrom", () => {
+    const rows = [
+      version("payment_approved", null, 1, "ACTIVE"),
+      version("payment_approved", null, 2, "SCHEDULED"),
+    ];
+    expect(inventoryFromCatalogue(rows, PAIR, FETCHED, NOW, false).generic).toEqual({
+      templateKey: "payment_approved",
+      version: 2,
+      status: "SCHEDULED",
+      servable: false,
+    });
+    expect(isServableAt(version("k", null, 1, "ACTIVE"), NOW)).toBe(false);
+    expect(isServableAt(version("k", null, 1, "ACTIVE", "2026-01-01T00:00:00Z"), NOW)).toBe(true);
+
+    // A started version still wins over a start-less one with a higher number.
+    const mixed = [
+      version("payment_approved", null, 1, "ACTIVE", "2026-01-01T00:00:00Z"),
+      version("payment_approved", null, 2, "ACTIVE"),
+    ];
+    expect(inventoryFromCatalogue(mixed, PAIR, FETCHED, NOW, false).generic).toMatchObject({
+      version: 1,
+      servable: true,
+    });
   });
 
   it("carries the catalogue's truncation onto the answer", () => {
