@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
+import type { TemplateSummary } from "../../../api/types";
 import type {
-  CollectorsInventoryResponse,
-  TemplateSummary,
-} from "../../../api/types";
-import type { SelectOption, TemplateGroup } from "./browse.logic";
+  CollectorsInventory,
+  SelectOption,
+  TemplateGroup,
+} from "./browse.logic";
 import {
   COLLECTORS_KNOWN_ELSEWHERE,
   COLLECTORS_STORED_HERE,
@@ -20,6 +21,8 @@ import {
   spellingSuffix,
   capSpellings,
   mergeInventoryAnswers,
+  inventoryFromCatalogue,
+  statusAtInstant,
   MAX_QUERIED_SPELLINGS,
   actionOptions,
   actionTypeOptions,
@@ -465,7 +468,7 @@ describe("identity cascade", () => {
   });
 
   describe("inventoryCollectorData", () => {
-    const inventory: CollectorsInventoryResponse = {
+    const inventory: CollectorsInventory = {
       action: "payment",
       actionType: "approved",
       at: "2026-09-11T19:20:53Z",
@@ -548,7 +551,7 @@ describe("identity cascade", () => {
   });
 
   describe("collectorSource", () => {
-    const inventory: CollectorsInventoryResponse = {
+    const inventory: CollectorsInventory = {
       action: "payment",
       actionType: "approved",
       at: "2026-09-11T19:20:53Z",
@@ -627,7 +630,7 @@ describe("identity cascade", () => {
   });
 
   describe("inventoryFreshness", () => {
-    const inventory: CollectorsInventoryResponse = {
+    const inventory: CollectorsInventory = {
       action: "payment",
       actionType: "approved",
       at: "2026-09-11T19:20:53Z",
@@ -731,8 +734,8 @@ describe("identity cascade", () => {
 
   describe("genericDelivery", () => {
     function withGeneric(
-      generic: CollectorsInventoryResponse["generic"],
-    ): CollectorsInventoryResponse {
+      generic: CollectorsInventory["generic"],
+    ): CollectorsInventory {
       return {
         action: "payment",
         actionType: "approved",
@@ -1216,7 +1219,7 @@ describe("mergeInventoryAnswers", () => {
       at,
       collectors,
       generic,
-    } as CollectorsInventoryResponse,
+    } as CollectorsInventory,
     isLoading: false,
     isError: false,
   });
@@ -1295,5 +1298,107 @@ describe("mergeInventoryAnswers", () => {
       answer("2026-09-15T10:05:00Z", []),
     ]);
     expect(agreeing.genericDivergent).toBe(false);
+  });
+});
+
+describe("inventoryFromCatalogue", () => {
+  const NOW = Date.parse("2026-10-20T12:00:00Z");
+  const FETCHED = Date.parse("2026-10-20T11:58:00Z");
+  const version = (
+    templateKey: string,
+    collector: string | null,
+    v: number,
+    status: TemplateSummary["status"],
+    effectiveFrom: string | null = null,
+    effectiveTo: string | null = null,
+  ): TemplateSummary => ({
+    templateKey,
+    version: v,
+    status,
+    action: "payment",
+    actionType: "approved",
+    collector,
+    subject: null,
+    effectiveFrom,
+    effectiveTo,
+    createdBy: "seed",
+    createdAt: "2026-01-01T00:00:00Z",
+  });
+  const PAIR = { action: "payment", actionType: "approved" };
+
+  it("reports the version the send path would pick, not the highest number", () => {
+    const rows = [
+      version("payment_approved", null, 1, "ACTIVE", "2026-01-01T00:00:00Z"),
+      // Published later, and scheduled for tomorrow: not what goes out today.
+      version("payment_approved", null, 2, "SCHEDULED", "2026-10-21T00:00:00Z"),
+      version("payment_approved", null, 3, "DRAFT"),
+    ];
+    const inventory = inventoryFromCatalogue(rows, PAIR, FETCHED, NOW);
+    expect(inventory.generic).toEqual({
+      templateKey: "payment_approved",
+      version: 1,
+      status: "ACTIVE",
+      servable: true,
+    });
+    expect(inventory.collectors).toEqual([]);
+    expect(inventory.at).toBe("2026-10-20T11:58:00.000Z");
+  });
+
+  it("breaks an effectiveFrom tie by the higher version, like the server", () => {
+    const from = "2026-01-01T00:00:00Z";
+    const rows = [
+      version("payment_approved", null, 4, "ACTIVE", from),
+      version("payment_approved", null, 5, "ACTIVE", from),
+    ];
+    expect(inventoryFromCatalogue(rows, PAIR, FETCHED, NOW).generic?.version).toBe(5);
+  });
+
+  it("keeps a collector with nothing servable, at its latest version", () => {
+    const rows = [
+      version("payment_approved__bbva", "bbva", 1, "DRAFT"),
+      version("payment_approved__bbva", "bbva", 2, "DRAFT"),
+      version("payment_approved__amex", "amex", 1, "ACTIVE", "2026-01-01T00:00:00Z"),
+    ];
+    const inventory = inventoryFromCatalogue(rows, PAIR, FETCHED, NOW);
+    expect(inventory.generic).toBeNull();
+    expect(inventory.collectors).toEqual([
+      { collector: "amex", templateKey: "payment_approved__amex", version: 1, status: "ACTIVE", servable: true },
+      { collector: "bbva", templateKey: "payment_approved__bbva", version: 2, status: "DRAFT", servable: false },
+    ]);
+  });
+
+  it("re-reads effectivity windows at the evaluation instant", () => {
+    // Listed as SCHEDULED when fetched, live by the time the page re-renders.
+    const rows = [version("payment_approved", null, 1, "SCHEDULED", "2026-10-20T11:59:00Z")];
+    expect(inventoryFromCatalogue(rows, PAIR, FETCHED, NOW).generic).toMatchObject({
+      status: "ACTIVE",
+      servable: true,
+    });
+    // effectiveTo is exclusive.
+    const expired = [
+      version("payment_approved", null, 1, "ACTIVE", "2026-01-01T00:00:00Z", "2026-10-20T12:00:00Z"),
+    ];
+    expect(inventoryFromCatalogue(expired, PAIR, FETCHED, NOW).generic).toMatchObject({
+      status: "ARCHIVED",
+      servable: false,
+    });
+  });
+
+  it("matches the stored spelling exactly", () => {
+    const rows = [
+      { ...version("payment_approved", null, 1, "ACTIVE", "2026-01-01T00:00:00Z"), action: "PAYMENT" },
+    ];
+    expect(inventoryFromCatalogue(rows, PAIR, FETCHED, NOW).generic).toBeNull();
+    expect(
+      inventoryFromCatalogue(rows, { action: "PAYMENT", actionType: "approved" }, FETCHED, NOW)
+        .generic,
+    ).not.toBeNull();
+  });
+
+  it("takes DRAFT and ARCHIVED as reported", () => {
+    expect(statusAtInstant(version("k", null, 1, "ARCHIVED", "2026-01-01T00:00:00Z"), NOW)).toBe(
+      "ARCHIVED",
+    );
+    expect(statusAtInstant(version("k", null, 1, "DRAFT"), NOW)).toBe("DRAFT");
   });
 });

@@ -31,7 +31,6 @@ import { usePublishTemplate } from "../../../queries/usePublishTemplate";
 import { toUiError } from "../../../lib/errors";
 import { collectorLabel, normalizeCollector } from "../../../lib/collector";
 import type { PreviewVariant } from "../../../preview/protocol";
-import type { CollectorInventoryEntry } from "../../../api/types";
 import { RenderedEmail } from "../RenderedEmail";
 import { ResolutionAnswer } from "./ResolutionAnswer";
 import { STATUS_COLOR, collectorBadgeColor } from "./browseStyle";
@@ -61,17 +60,16 @@ import {
   switchBrowseMode,
   versionOptions,
   type BrowseMode,
+  type CollectorInventoryEntry,
 } from "./browse.logic";
 
 
 /**
- * The instant the inventory was computed at, in the reader's own clock.
+ * The instant the inventory's rows were read, in the reader's own clock.
  *
- * Rendered rather than hidden because the list is a PHOTOGRAPH: `status` and
- * `servable` are derived against this instant, so an answer fetched two minutes
- * ago can already describe a version that has since gone live or expired. "Now"
- * would be the page's own guess about when the server looked; this is what the
- * server actually reported, which is why the endpoint echoes it back at all.
+ * Rendered rather than hidden because the list is a PHOTOGRAPH of the stored
+ * decisions: a draft published or a version archived by somebody else since
+ * then is not in it. "Now" would claim a freshness the rows do not have.
  *
  * Locale left to the browser (`undefined`) on purpose: pinning es-AR here would
  * print one office's format on every machine, and the instant is the same one
@@ -169,27 +167,25 @@ export function BrowsePage() {
   /*
     THE COLLECTOR STEP'S SOURCE OF TRUTH.
 
-    `GET /collectors` answers for EVERY client of this action pair in one
-    response — the ones with a servable variant, the ones whose variant exists
-    but is not going out, and, through `generic`, everyone else. That last part
-    is what a list built from the catalogue never had: the catalogue can only
-    name collectors somebody authored something for, so a closed list built from
-    it could not express "santander, which has no variant" and the control had
-    to be free text to stay useful.
+    The inventory answers for EVERY client of this action pair — the ones with
+    a servable variant, the ones whose variant exists but is not going out, and,
+    through `generic`, everyone else. It is derived from the catalogue by the
+    send path's own precedence (see `inventoryFromCatalogue`): the API has no
+    endpoint for it.
 
-    Asked without `at`, which means now. A picker for historical instants is the
-    next work item; the hook and the key already take one.
+    Evaluated at now. A picker for historical instants would only need to pass a
+    different instant to the derivation.
   */
   /*
     ASKED IN A STORED SPELLING, NOT IN THE CANONICAL NAME ON SCREEN.
 
-    The selection holds canonical names (see `actionOptions`), but the backend
-    matches action/actionType on /collectors exactly as stored: sending
-    `payment` for a pair stored as `PAYMENT` would come back empty and claim that
-    nobody has a variant (live, dell went missing from the list exactly this
-    way). So the inventory is asked once per stored spelling — the same bounded,
-    capped set the send-path panel resolves in — and the answers are merged by
-    collector (`mergeInventoryAnswers`). One spelling is one call, as before.
+    The selection holds canonical names (see `actionOptions`), but the send
+    path matches action/actionType exactly as stored, and so does the inventory:
+    a pair stored as both `PAYMENT` and `payment` has two answers, and asking in
+    one spelling silently drops the collectors stored in the other. So the
+    inventory is derived once per stored spelling — the same bounded, capped set
+    the send-path panel resolves in — and the answers are merged by collector
+    (`mergeInventoryAnswers`).
 
     Asked in BOTH browse orders. The collector-first list does not read it, but
     the delivery notices under the controls — no generic, no variants — do, and
@@ -240,13 +236,11 @@ export function BrowsePage() {
   const generic = genericDelivery(inventory);
 
   /*
-    One shape, two sources. When the inventory answered it IS the list; when it
-    did not, the catalogue-derived names stand in — the same list this control
-    offered before the endpoint existed, and the notice below says so.
-
-    The fallback list is also what fills the control while the first fetch is in
-    flight, which is harmless because the control is disabled until it settles:
-    the reader never picks from a provisional list that is about to be replaced.
+    One shape, two sources. When there is an inventory it IS the list; while
+    there is none (the catalogue still loading, or failed) the bare
+    catalogue-derived names stand in. That is harmless because the control is
+    disabled until the catalogue settles: the reader never picks from a
+    provisional list that is about to be replaced.
   */
   const collectorData = useMemo(
     () =>
@@ -286,7 +280,7 @@ export function BrowsePage() {
   /**
    * WHAT EACH CLIENT ACTUALLY RECEIVES, SHOWN WHILE CHOOSING.
    *
-   * `servable` is the field this endpoint was added for, and it would be wasted
+   * `servable` is the field the inventory exists for, and it would be wasted
    * if the reader only learned it after picking. A collector whose variant is a
    * draft is receiving the generic RIGHT NOW while everyone assumes it has its
    * own mail — that is the misconception the whole feature exists to break, and
@@ -689,7 +683,7 @@ export function BrowsePage() {
             closed list is worse in principle — it is that no authoritative list
             existed to close it over.
 
-            `GET /collectors` retires that objection. It reports every collector
+            The inventory retires that objection. It reports every collector
             of this action pair whether or not its variant is servable, and it
             reports `generic` alongside them, so one response answers for every
             client INCLUDING the ones it does not list: they all get the generic,
@@ -889,21 +883,18 @@ export function BrowsePage() {
         {/*
           WHEN the answer was computed, next to the answer.
 
-          The endpoint echoes `at` back precisely because `status` and
-          `servable` are derived against it, and this query is deliberately not
-          stale-cached for the same reason: a version scheduled for 09:00 goes
-          live at 09:00 with nobody writing anything. Even so, what is on screen
-          was true when it was fetched, and the honest way to say that is to
-          print the server's instant rather than the word "ahora".
+          Effectivity windows are re-evaluated on every render, so a version
+          scheduled for 09:00 reads as live at 09:00 with nobody writing
+          anything. The stored decisions behind them — drafts, archives — are
+          only as fresh as the catalogue, so the instant printed is when it was
+          read, never the word "ahora".
         */}
         {/*
           ONE RULE FOR THE TIMESTAMP: it follows the inventory, not the mode.
           The inventory is fetched in both orders because the delivery notices
           below — the red "no generic" alert and the empty-inventory line —
           read it in both, and neither may appear without the instant it was
-          true at and whether a refresh has failed since. The catalogue-fallback
-          notice right after stays template-first only: it describes that
-          order's Collector list, and the collector-first list has its own hint.
+          true at and whether a refresh has failed since.
         */}
         {source === "INVENTORY" && inventory ? (
           <Text size="xs" c="dimmed" mt="sm">
@@ -945,46 +936,6 @@ export function BrowsePage() {
               </>
             ) : null}
           </Text>
-        ) : null}
-
-        {/*
-          THE DEGRADED PATH — an expected state, not a failure.
-
-          The endpoint is not on the deployed backend yet, so it 404s (and the
-          ingress may answer with a bare non-JSON body). The page must stay
-          fully usable: the cascade keeps working, the two panels keep working,
-          and the Collector step falls back to the names the catalogue already
-          loaded.
-
-          Neutral and grey, in the same register as the UNREPORTED banner below:
-          nothing is broken and nothing needs fixing here. What it must say is
-          precisely WHAT THE LIST NOW OMITS — collectors nobody authored
-          anything for cannot appear at all, and no name in it can be reported
-          as served or not served — because a shorter list that looks the same
-          as the complete one is the failure mode worth spending words on.
-        */}
-        {mode === "TEMPLATE_FIRST" && source === "CATALOGUE_FALLBACK" ? (
-          <Alert
-            color="gray"
-            variant="light"
-            title="Esta versión de la API no provee el inventario de collectors"
-            mt="sm"
-          >
-            <Stack gap={4}>
-              <Text size="sm">
-                La lista de collectors se deriva del catálogo guardado, no del
-                inventario. Solo incluye collectors que tienen alguna versión
-                escrita para alguna terna, y no puede indicar cuáles reciben su
-                propia plantilla y cuáles caen en la genérica. Un cliente sin
-                nada escrito no aparece, aunque exista y esté recibiendo mails.
-              </Text>
-              <Text size="xs" c="dimmed">
-                Es lo esperable hasta que se despliegue el endpoint de
-                inventario en el backend. Para preguntar por un collector que no
-                figura en la lista, usa el panel “¿Qué elige el envío?”.
-              </Text>
-            </Stack>
-          </Alert>
         ) : null}
 
         {/*

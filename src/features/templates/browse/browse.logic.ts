@@ -12,9 +12,8 @@
 // version is in effect" rule can be tested directly, which is where the subtle
 // bugs live.
 import type {
-  CollectorInventoryEntry,
-  CollectorsInventoryResponse,
   TemplateContentResponse,
+  TemplateStatus,
   TemplateSummary,
 } from "../../../api/types";
 import { normalizeCollector } from "../../../lib/collector";
@@ -232,15 +231,13 @@ export const COLLECTORS_KNOWN_ELSEWHERE =
  * Every collector name the CATALOGUE knows, split by whether it has anything
  * stored under the pair currently chosen.
  *
- * THE FALLBACK SOURCE, and only that. The Collector step is fed by
- * `GET /collectors` — an authoritative inventory that reports every client,
- * including the ones nobody ever authored a variant for, which is the question
- * this list structurally cannot answer. This function is what the page falls
- * back to when that endpoint is unreachable (it is not deployed yet), and the
- * page says so out loud when it does, because a list derived from stored
- * templates is a strictly smaller and less truthful answer: it can only name
- * collectors somebody wrote something for, and it cannot report `servable` at
- * all — a draft variant is indistinguishable here from one going out today.
+ * THE FALLBACK SOURCE, and only that. The Collector step is fed by the
+ * inventory (`inventoryFromCatalogue`), which reports per collector whether its
+ * variant is servable and whether a generic exists to fall back to. This
+ * function is what fills the control while there is no inventory to read — the
+ * catalogue still loading, or failed — and it is the less truthful answer: it
+ * cannot report `servable` at all, so a draft variant is indistinguishable here
+ * from one going out today.
  *
  * It used to feed a free-text Autocomplete as mere suggestions, which is why
  * the names arrive bare. They are OPTIONS now, and the two headings are what
@@ -382,14 +379,12 @@ export type CollectorSelectData = Array<SelectOption | CollectorCatalogueGroup>;
  * null would remove the reader's only way to look at the baseline and find out
  * that there isn't one.
  *
- * The server's ORDER IS PRESERVED, not re-sorted here. The contract states the
- * list is sorted by collector name and stable, so sorting again would be a
- * second sort rule that agrees with the server today and drifts from it the day
- * the server's changes — and the reader would have no way to tell which one
- * they were looking at.
+ * The inventory's ORDER IS PRESERVED, not re-sorted here: it is already sorted
+ * by collector name, and a second sort rule in this function would be one more
+ * place to drift from it.
  *
  * Value and label are both the collector name: this is a closed list, so the
- * value that leaves the control is a name the server just gave us, which is
+ * value that leaves the control is a name the catalogue already holds, which is
  * precisely why no format validation survives on this field. What the option
  * adds beyond the name — the version, the status, whether it is actually being
  * served — cannot live in a string label; it is rendered per option by the
@@ -471,9 +466,9 @@ export type GroupedSelectData = Array<SelectOption | SelectOptionGroup>;
 /**
  * Every distinct collector name in the stored catalogue, normalized and sorted.
  *
- * THE ONLY SOURCE THE COLLECTOR-FIRST ORDER HAS. `GET /collectors` answers per
+ * THE ONLY SOURCE THE COLLECTOR-FIRST ORDER HAS. The inventory answers per
  * action pair, and in this order no pair has been chosen yet, so there is no
- * endpoint to ask "which clients exist?". The catalogue is the honest fallback
+ * pair to ask "which clients exist?" about. The catalogue is the honest answer
  * and the page says what it omits: a client nobody authored anything for is
  * absent here, exactly as it is from {@link catalogueCollectorGroups}.
  *
@@ -738,7 +733,7 @@ export function collectorSource(input: {
   action: string;
   actionType: string;
   isLoading: boolean;
-  inventory: CollectorsInventoryResponse | null;
+  inventory: CollectorsInventory | null;
 }): CollectorSource {
   if (input.action === "" || input.actionType === "") return "AWAITING_PAIR";
   if (input.inventory) return "INVENTORY";
@@ -768,16 +763,16 @@ export type InventoryFreshness =
  * THIS EXISTS BECAUSE A FAILED BACKGROUND REFETCH IS INVISIBLE. TanStack keeps
  * the last successful `data` when a refetch fails and only raises `isError`, so
  * a page reading `data` alone renders a blown refresh and a fresh answer
- * identically — same list, same `at`, no difference at all. After a blip, or a
- * backend rolled back to a build without this endpoint mid-session, the reader
- * would go on trusting a timestamp that stopped advancing.
+ * identically — same list, same `at`, no difference at all. After a blip in
+ * the catalogue refetch the inventory derived from it would keep its old `at`,
+ * and the reader would go on trusting a timestamp that stopped advancing.
  *
  * `data` is checked first on purpose. With no data and an error the page is
- * already in `CATALOGUE_FALLBACK`, which says the whole story in its own alert;
+ * already in `CATALOGUE_FALLBACK`, and the catalogue error says the whole story;
  * reporting staleness on top of it would be the same failure told twice.
  */
 export function inventoryFreshness(input: {
-  inventory: CollectorsInventoryResponse | null;
+  inventory: CollectorsInventory | null;
   isError: boolean;
 }): InventoryFreshness {
   if (!input.inventory) return "NOT_APPLICABLE";
@@ -814,13 +809,12 @@ export type GenericDelivery =
  * Reads it off the inventory.
  *
  * Note it answers UNKNOWN for a missing inventory rather than assuming the
- * comfortable case. The deployed API cannot answer this question yet, and
- * "probably there is a generic" rendered as silence is the same class of bug as
+ * comfortable case. "Probably there is a generic" rendered as silence is the same class of bug as
  * reading an absent `fallbackToGeneric` as `false`: the page would be quietest
  * in exactly the situation where nothing is being delivered.
  */
 export function genericDelivery(
-  inventory: CollectorsInventoryResponse | null,
+  inventory: CollectorsInventory | null,
 ): GenericDelivery {
   if (!inventory) return "UNKNOWN";
   if (inventory.generic == null) return "MISSING";
@@ -1094,7 +1088,7 @@ export function resolveSpellings(
  * The most spellings of one pair the page will fan out to.
  *
  * Every spelling costs one /resolve call (plus a local render) and one
- * /collectors call. The catalogue bounds that list today — the live drift is two
+ * inventory derivation. The catalogue bounds that list today — the live drift is two
  * spellings — but nothing bounds the catalogue, and a pair written ten ways
  * would turn one button press into twenty requests. Five covers every realistic
  * drift and keeps the worst case small; the page says when it stopped short.
@@ -1117,16 +1111,194 @@ export function capSpellings(
   };
 }
 
-/** One spelling's inventory query, reduced to what the merge needs. */
+// --- The collector inventory, derived from the catalogue -------------------
+//
+// The API has no endpoint that lists every collector of an action pair; the
+// one this page was first built against (`GET /collectors`) never shipped. The
+// question it answered is still the one the Collector step asks — who has a
+// variant, whether that variant is what actually goes out, and whether there
+// is a generic to fall back to — and every fact needed to answer it is already
+// in the full catalogue the page loads anyway. So it is answered here, from
+// those rows, by the same precedence the send path uses.
+
+/** One collector's answer for one action pair. */
+export interface CollectorInventoryEntry {
+  /** The client this row is about, exactly as stored. */
+  collector: string;
+  templateKey: string;
+  /**
+   * The version that would ACTUALLY BE SERVED at `at` — never simply the
+   * highest number stored. When nothing is servable, the latest version, so a
+   * draft variant still shows up as the thing somebody wrote and is not sending.
+   */
+  version: number;
+  /** Derived at the evaluation instant, see {@link statusAtInstant}. */
+  status: TemplateStatus;
+  /**
+   * Whether this collector's own variant is what the send path would put in
+   * the envelope. THE FIELD THAT MATTERS — existence is not delivery.
+   *
+   * A collector with nothing servable STILL APPEARS, with `servable: false`:
+   * "somebody wrote something and it is not going out" and "nobody wrote
+   * anything" call for opposite next moves, and dropping the row would turn
+   * the first into the second.
+   */
+  servable: boolean;
+}
+
+export interface CollectorsInventory {
+  action: string;
+  actionType: string;
+  /**
+   * How current the answer is: the instant the catalogue behind it was READ.
+   *
+   * Effectivity windows are evaluated against the clock when the inventory is
+   * derived, so a version scheduled for 09:00 reads as live at 09:00 without a
+   * refetch. But DRAFT and ARCHIVED are decisions somebody writes, and those are
+   * only as fresh as the rows — so the line that dates the list prints the
+   * older of the two instants, never the comfortable "now".
+   */
+  at: string;
+  /**
+   * The fallback destination, and A SEPARATE FIELD ON PURPOSE — it is not one
+   * client's override but the template every OTHER client gets, including every
+   * client that does not appear in `collectors` at all.
+   *
+   * NULL IS THE DANGEROUS CASE AND IT IS NOT A FALLBACK: with no generic, any
+   * collector without a servable version of its own gets a 404 from the send
+   * path. A generic that exists but is not servable delivers exactly as much,
+   * which is why `servable` is here too.
+   */
+  generic: Omit<CollectorInventoryEntry, "collector"> | null;
+  /** One entry per collector, sorted by name in code-point order. */
+  collectors: CollectorInventoryEntry[];
+}
+
+/**
+ * A version's status at `at`, mirroring the server's `TemplateVersion.statusAt`.
+ *
+ * DRAFT and ARCHIVED are decisions and are taken as reported. SCHEDULED and
+ * ACTIVE are only where the clock sits against the effectivity window, so they
+ * are recomputed here rather than trusted: the list reports them as of the
+ * instant it was SERVED, and that instant falls further behind every minute
+ * the page stays open. `effectiveTo` is exclusive, as on the server.
+ *
+ * An ARCHIVED row may be one that simply expired — the list says ARCHIVED for
+ * both. That is safe because `at` is never earlier than the fetch: a window
+ * that had closed then is still closed now.
+ */
+export function statusAtInstant(row: TemplateSummary, at: number): TemplateStatus {
+  if (row.status === "DRAFT" || row.status === "ARCHIVED") return row.status;
+  if (row.effectiveFrom == null) return row.status;
+  if (at < Date.parse(row.effectiveFrom)) return "SCHEDULED";
+  if (row.effectiveTo != null && at >= Date.parse(row.effectiveTo)) return "ARCHIVED";
+  return "ACTIVE";
+}
+
+/**
+ * What one templateKey would serve at `at`: the servable version with the
+ * latest `effectiveFrom`, ties broken by the higher version — the send path's
+ * own order. Failing that, the latest version, reported as not servable.
+ */
+function inventoryEntryFor(
+  versions: TemplateSummary[],
+  at: number,
+): Omit<CollectorInventoryEntry, "collector"> {
+  const effectiveFrom = (row: TemplateSummary) =>
+    row.effectiveFrom == null ? Number.NEGATIVE_INFINITY : Date.parse(row.effectiveFrom);
+
+  let served: TemplateSummary | null = null;
+  for (const row of versions) {
+    if (statusAtInstant(row, at) !== "ACTIVE") continue;
+    if (
+      served == null ||
+      effectiveFrom(row) > effectiveFrom(served) ||
+      (effectiveFrom(row) === effectiveFrom(served) && row.version > served.version)
+    ) {
+      served = row;
+    }
+  }
+  if (served) {
+    return {
+      templateKey: served.templateKey,
+      version: served.version,
+      status: "ACTIVE",
+      servable: true,
+    };
+  }
+
+  const latest = versions.reduce((best, row) => (row.version > best.version ? row : best));
+  return {
+    templateKey: latest.templateKey,
+    version: latest.version,
+    status: statusAtInstant(latest, at),
+    servable: false,
+  };
+}
+
+/**
+ * The inventory of one stored spelling of an action pair, out of the catalogue.
+ *
+ * Matches action/actionType EXACTLY, like the send path does: the caller asks
+ * once per stored spelling (`resolveSpellings`) and merges the answers
+ * (`mergeInventoryAnswers`), so this function must not quietly fold spellings
+ * together itself.
+ *
+ * Covers the same set the server-side inventory would have: every collector
+ * with something stored for the pair. A client with nothing stored is absent
+ * here and is answered for by `generic`.
+ *
+ * @param fetchedAt when the rows were read — becomes `at`, see {@link CollectorsInventory.at}
+ * @param now the instant the effectivity windows are evaluated at
+ */
+export function inventoryFromCatalogue(
+  rows: TemplateSummary[],
+  spelling: ActionSpelling,
+  fetchedAt: number,
+  now: number,
+): CollectorsInventory {
+  const byKey = new Map<string, TemplateSummary[]>();
+  for (const row of rows) {
+    if (row.action !== spelling.action || row.actionType !== spelling.actionType) continue;
+    const versions = byKey.get(row.templateKey) ?? [];
+    versions.push(row);
+    byKey.set(row.templateKey, versions);
+  }
+
+  let generic: CollectorsInventory["generic"] = null;
+  const collectors: CollectorInventoryEntry[] = [];
+  for (const versions of byKey.values()) {
+    const entry = inventoryEntryFor(versions, now);
+    const collector = versions[0].collector;
+    if (collector == null) {
+      generic = entry;
+    } else {
+      collectors.push({ collector, ...entry });
+    }
+  }
+  collectors.sort((a, b) =>
+    a.collector < b.collector ? -1 : a.collector > b.collector ? 1 : 0,
+  );
+
+  return {
+    action: spelling.action,
+    actionType: spelling.actionType,
+    at: new Date(fetchedAt).toISOString(),
+    generic,
+    collectors,
+  };
+}
+
+/** One spelling's inventory, reduced to what the merge needs. */
 export interface InventoryAnswer {
-  data: CollectorsInventoryResponse | null;
+  data: CollectorsInventory | null;
   isLoading: boolean;
   isError: boolean;
 }
 
 export interface MergedInventory {
   /** Null while any spelling is still on its first load, or when none answered. */
-  inventory: CollectorsInventoryResponse | null;
+  inventory: CollectorsInventory | null;
   /**
    * Normalized collectors whose answer DIFFERS by spelling: they appear in more
    * than one answer and disagree on `servable` or `version`.
@@ -1145,12 +1317,13 @@ function instantOf(at: string): number {
 }
 
 /**
- * One Collector list out of one /collectors answer per stored spelling.
+ * One Collector list out of one inventory per stored spelling.
  *
- * WHY THERE IS MORE THAN ONE ANSWER. /collectors matches action/actionType
- * exactly as stored. Asked only as PAYMENT/APPROVED, the live API leaves out
- * dell, whose variant is stored as payment/approved — the list showed four
- * collectors with variants when there are five. Each stored spelling is asked
+ * WHY THERE IS MORE THAN ONE ANSWER. The send path matches action/actionType
+ * exactly as stored, and so does `inventoryFromCatalogue`. On the old API,
+ * which stored spellings raw, asking only as PAYMENT/APPROVED left out dell,
+ * whose variant was stored as payment/approved — the list showed four
+ * collectors with variants when there were five. Each stored spelling is asked
  * separately (the same bounded set the resolve panel uses) and the answers are
  * merged here.
  *
@@ -1185,7 +1358,7 @@ export function mergeInventoryAnswers(answers: InventoryAnswer[]): MergedInvento
 
   const arrived = answers
     .map((answer) => answer.data)
-    .filter((data): data is CollectorsInventoryResponse => data != null);
+    .filter((data): data is CollectorsInventory => data != null);
   if (isLoading || arrived.length === 0) return { inventory: null, ...empty };
   if (answers.length === 1) return { inventory: arrived[0], ...empty };
 

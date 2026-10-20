@@ -4,11 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MantineProvider } from "@mantine/core";
 import { MemoryRouter } from "react-router-dom";
-import type {
-  CollectorsInventoryResponse,
-  TemplateContentResponse,
-  TemplateSummary,
-} from "../../../api/types";
+import type { TemplateContentResponse, TemplateSummary } from "../../../api/types";
 import { BrowsePage } from "./BrowsePage";
 import { WITHOUT_OWN_VARIANT, WITH_OWN_VARIANT } from "./browse.logic";
 
@@ -25,7 +21,6 @@ vi.mock("../../../api/templatesClient", async (importOriginal) => {
     templatesApi: {
       ...actual.templatesApi,
       list: vi.fn(),
-      collectorsInventory: vi.fn(),
       resolveByAction: vi.fn(),
     },
   };
@@ -82,10 +77,6 @@ function renderBrowse(rows: TemplateSummary[] = ROWS): User {
     totalElements: rows.length,
     totalPages: 1,
   });
-  // The inventory endpoint is not deployed; the page falls back to the catalogue.
-  vi.mocked(templatesApi.collectorsInventory).mockRejectedValue(
-    new TypeError("Failed to fetch"),
-  );
 
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -128,7 +119,7 @@ async function openList(user: User, name: RegExp): Promise<HTMLElement> {
   return listbox as unknown as HTMLElement;
 }
 
-async function pick(user: User, name: RegExp, option: string) {
+async function pick(user: User, name: RegExp, option: string | RegExp) {
   const listbox = await openList(user, name);
   await user.click(within(listbox).getByRole("option", { name: option }));
 }
@@ -329,7 +320,8 @@ describe("BrowsePage — a pair written more than one way", () => {
       expect(field(/^action type$/i)).toHaveValue("approved (3) · 2 formas de escritura"),
     );
     await waitForCollectorList();
-    await pick(user, /^collector$/i, "dell");
+    // Inventory options carry their version, status and delivery badge.
+    await pick(user, /^collector$/i, /^dell/);
 
     // The catalogue panel finds dell's variant despite its spelling.
     expect(await screen.findByText("payment_approved__dell")).toBeInTheDocument();
@@ -353,47 +345,20 @@ describe("BrowsePage — a pair written more than one way", () => {
     expect(screen.getByText("dell tiene su propia versión")).toBeInTheDocument();
   });
 
-  // The browser finding: asked only as PAYMENT, /collectors left dell out.
+  // The browser finding: asked only as PAYMENT, the inventory left dell out.
   it("merges the collector inventory across stored spellings", async () => {
-    const answers: Record<string, CollectorsInventoryResponse> = {
-      PAYMENT: {
-        action: "PAYMENT",
-        actionType: "APPROVED",
-        at: "2026-09-15T10:05:00Z",
-        generic: { templateKey: "payment_approved", version: 3, status: "ACTIVE", servable: true },
-        collectors: [
-          { collector: "bbva", templateKey: "payment_approved__bbva", version: 1, status: "ACTIVE", servable: true },
-        ],
-      } as CollectorsInventoryResponse,
-      payment: {
-        action: "payment",
-        actionType: "approved",
-        at: "2026-09-15T10:00:00Z",
-        generic: null,
-        collectors: [
-          { collector: "bbva", templateKey: "payment_approved__bbva", version: 1, status: "DRAFT", servable: false },
-          { collector: "dell", templateKey: "payment_approved__dell", version: 10, status: "ACTIVE", servable: true },
-        ],
-      } as CollectorsInventoryResponse,
-    };
-    const user = renderBrowse(DRIFTED);
-    vi.mocked(templatesApi.collectorsInventory).mockImplementation(
-      async (action: string) => answers[action],
-    );
+    const user = renderBrowse([
+      ...DRIFTED,
+      // bbva is also stored in the other spelling, as a draft: whether bbva gets
+      // its own mail depends on how the sender spells the action.
+      { ...row("payment_approved__bbva", "payment", "approved", "bbva", 2), status: "DRAFT" },
+    ]);
     await waitForCatalogue();
     await pick(user, /^action$/i, "payment (3) · 2 formas de escritura");
     await waitForCollectorList();
 
-    expect(templatesApi.collectorsInventory).toHaveBeenCalledWith(
-      "PAYMENT",
-      "APPROVED",
-      expect.anything(),
-    );
-    expect(templatesApi.collectorsInventory).toHaveBeenCalledWith(
-      "payment",
-      "approved",
-      expect.anything(),
-    );
+    // Derived from the catalogue: no request beyond the list itself.
+    expect(templatesApi.list).toHaveBeenCalledTimes(1);
     expect(
       await screen.findByText(/2 collectors con variante propia, reunidos de 2 formas de escritura/),
     ).toBeInTheDocument();
@@ -404,7 +369,7 @@ describe("BrowsePage — a pair written more than one way", () => {
       .map((option) => option.textContent ?? "");
     const dell = texts.find((text) => text.startsWith("dell"));
     const bbva = texts.find((text) => text.startsWith("bbva"));
-    expect(dell).toContain("v10");
+    expect(dell).toContain("v1");
     expect(dell).not.toContain("según escritura");
     expect(bbva).toContain("según escritura");
   });
@@ -423,7 +388,7 @@ describe("BrowsePage — a pair written more than one way", () => {
     await pick(user, /^action$/i, "payment (3)");
     await pick(user, /^action type$/i, "approved (2)");
     await waitForCollectorList();
-    await pick(user, /^collector$/i, "bbva");
+    await pick(user, /^collector$/i, /^bbva/);
 
     await user.click(screen.getByRole("button", { name: /qué se envía ahora/i }));
 

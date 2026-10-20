@@ -17,7 +17,6 @@ import type {
   PublishRequest,
   VersionStatusResponse,
   ResolveResponse,
-  CollectorsInventoryResponse,
   TemplateContentResponse,
   TemplateSummary,
   PageResponse,
@@ -202,34 +201,6 @@ export const templatesApi = {
     if (opts?.collector) search.set("collector", opts.collector);
     if (opts?.at) search.set("at", opts.at);
     return request<TemplateContentResponse>(`/resolve?${search.toString()}`);
-  },
-
-  // Every collector's answer for one action pair, in one call.
-  //
-  // Same two required parameters as resolveByAction, and the same optional
-  // `at` — but a different QUESTION. `resolveByAction` asks about one client at
-  // a time and answers with a template; this asks about all of them at once and
-  // answers with who is served by their own variant, who falls through to the
-  // generic, and whether there is a generic to fall through to at all.
-  //
-  // `at` is only set when provided, for the same reason the collector is on
-  // resolveByAction: `at=` empty is not "now", it is an unparseable instant, and
-  // the server would have to guess. Omitted means now, which is the default the
-  // contract already states.
-  //
-  // NOT DEPLOYED YET on the running backend: this 404s there, and the ingress
-  // may answer with a bare non-JSON body. Callers must degrade rather than
-  // break — see useCollectorsInventory and the browse page's fallback.
-  collectorsInventory(
-    action: string,
-    actionType: string,
-    opts?: { at?: string },
-  ) {
-    const search = new URLSearchParams({ action, actionType });
-    if (opts?.at) search.set("at", opts.at);
-    return request<CollectorsInventoryResponse>(
-      `/collectors?${search.toString()}`,
-    );
   },
 
   // Rendering and validation are NOT here. The API stores templates and decides
