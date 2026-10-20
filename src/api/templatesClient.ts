@@ -21,6 +21,7 @@ import type {
   ApiErrorBody,
 } from "./types";
 import {
+  fromWireError,
   fromWireContent,
   fromWireCreateResult,
   fromWirePage,
@@ -48,7 +49,7 @@ export class ApiError extends Error {
   readonly body: ApiErrorBody;
 
   constructor(status: number, body: ApiErrorBody) {
-    super(body?.error ?? `HTTP ${status}`);
+    super(body.message ?? `HTTP ${status}`);
     this.name = "ApiError";
     this.status = status;
     this.body = body;
@@ -73,7 +74,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (res.status === 204) return undefined as T;
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new ApiError(res.status, body as ApiErrorBody);
+  if (!res.ok) throw new ApiError(res.status, fromWireError(body));
   return body as T;
 }
 

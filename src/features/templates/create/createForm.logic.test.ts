@@ -226,6 +226,18 @@ describe("mapValidationDetails", () => {
     expect(generalDetails).toEqual([]);
   });
 
+  it("maps the server's snake_case field names onto the form's fields", () => {
+    const { fieldErrors, generalDetails } = mapValidationDetails([
+      "action_type: only letters and digits grouped by single underscores are allowed",
+      "template_key: does not match action/action_type",
+    ]);
+    expect(fieldErrors).toEqual({
+      actionType: "action_type: only letters and digits grouped by single underscores are allowed",
+      templateKey: "template_key: does not match action/action_type",
+    });
+    expect(generalDetails).toEqual([]);
+  });
+
   it("routes unknown-field or unprefixed details to generalDetails", () => {
     const { fieldErrors, generalDetails } = mapValidationDetails([
       "effectiveTo must be after effectiveFrom",

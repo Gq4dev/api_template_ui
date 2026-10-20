@@ -310,10 +310,15 @@ export interface MappedValidationDetails {
 }
 
 /**
- * Splits backend `VALIDATION_ERROR` `details[]` (e.g. `"html: must not be
+ * Splits backend `VALIDATION_ERROR` details (e.g. `"html: must not be
  * blank"`) into per-field errors when the prefix matches a known form
  * field, and a general list for anything else (cross-field messages, or
  * fields this form doesn't render).
+ *
+ * The server names fields as they are on the wire, in snake_case
+ * (`action_type: …`), so the prefix is camelCased before the lookup. The
+ * detail itself is shown untouched: it is the server's sentence, and it names
+ * the field the way the API documentation does.
  */
 export function mapValidationDetails(
   details: string[],
@@ -324,7 +329,12 @@ export function mapValidationDetails(
   for (const detail of details) {
     const separatorIndex = detail.indexOf(":");
     const field =
-      separatorIndex >= 0 ? detail.slice(0, separatorIndex).trim() : "";
+      separatorIndex >= 0
+        ? detail
+            .slice(0, separatorIndex)
+            .trim()
+            .replace(/_([a-z0-9])/g, (_, next: string) => next.toUpperCase())
+        : "";
 
     if (KNOWN_FIELDS.has(field as keyof CreateFormValues)) {
       fieldErrors[field as keyof CreateFormValues] = detail;

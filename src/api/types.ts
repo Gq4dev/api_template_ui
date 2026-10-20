@@ -198,23 +198,29 @@ export interface TemplateContentResponse {
 // API types at all: see src/preview/protocol.ts.
 
 // ---- Error envelope (all non-2xx) ----
+// The business errors of the NTA envelope, by name. On the wire they are told
+// apart by `extended_code` (see ./wire), which is the stable part of the
+// contract; the names are ours.
 export type ApiErrorCode =
-  | "VALIDATION_ERROR"
-  | "TEMPLATE_NOT_FOUND"
-  | "OBJECT_NOT_FOUND"
-  | "OBJECT_ALREADY_EXISTS"
-  | "INVALID_STATE_TRANSITION"
-  // 409. Editing content on a version that is already published. Its bytes are
-  // frozen because something may already have been sent with them.
+  | "VALIDATION_ERROR" // 4000 · 400
+  | "OBJECT_NOT_FOUND" // 4004 · 404
+  | "TEMPLATE_NOT_FOUND" // 4005 · 404
+  | "OBJECT_ALREADY_EXISTS" // 4009 · 409
+  // 4010 · 409. Editing content on a version that is already published. Its
+  // bytes are frozen because something may already have been sent with them.
   | "VERSION_NOT_EDITABLE"
-  // 503. The API refuses to store a template it could not validate, so writes
-  // fail closed when the validation service is down. Distinct from a network
-  // failure: the API answered, it just cannot vouch for the content.
-  | "VALIDATOR_UNAVAILABLE";
+  | "INVALID_STATE_TRANSITION"; // 4011 · 409
 
+/**
+ * A non-2xx body, already read. `code` is null when the body was not an NTA
+ * envelope — Spring's default error body (a 500 from Mongo or S3, a 400 raised
+ * before any handler ran) or no JSON at all — and `message` is then null too:
+ * nothing in those bodies is meant for a reader.
+ */
 export interface ApiErrorBody {
-  error: ApiErrorCode;
-  details?: string[]; // present on VALIDATION_ERROR and VERSION_NOT_EDITABLE
-  from?: TemplateStatus; // present on INVALID_STATE_TRANSITION
-  to?: TemplateStatus;
+  code: ApiErrorCode | null;
+  /** The raw `extended_code`, kept for codes this UI does not know yet. */
+  extendedCode: number | null;
+  /** The server's message, translated by Accept-Language. */
+  message: string | null;
 }

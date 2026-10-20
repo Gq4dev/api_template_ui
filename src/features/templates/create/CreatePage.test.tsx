@@ -223,8 +223,9 @@ describe("CreatePage", () => {
     // Server rejected this attempt (VALIDATION_ERROR) → typed error, new key next time.
     vi.mocked(templatesApi.create).mockRejectedValue(
       new ApiError(400, {
-        error: "VALIDATION_ERROR",
-        details: ["html: must not be blank"],
+        code: "VALIDATION_ERROR",
+        extendedCode: 4000,
+        message: "html: must not be blank",
       }),
     );
 
@@ -354,8 +355,9 @@ describe("CreatePage", () => {
     );
     vi.mocked(templatesApi.create).mockRejectedValueOnce(
       new ApiError(400, {
-        error: "VALIDATION_ERROR",
-        details: ["html: must not be blank"],
+        code: "VALIDATION_ERROR",
+        extendedCode: 4000,
+        message: "html: must not be blank",
       }),
     );
 

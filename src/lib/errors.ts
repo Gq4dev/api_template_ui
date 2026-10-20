@@ -1,6 +1,7 @@
 // Normalizes ApiError (and non-ApiError network failures) into a shape the UI can
 // render without importing api/types or branching on ApiError.body directly in every
-// component. See api-template/docs/INTEGRATION.md §7 for the source error taxonomy.
+// component. The error taxonomy is notification-template-service's NTA envelope,
+// read by `extended_code` in src/api/wire.ts before it gets here.
 import { ApiError } from "../api/templatesClient";
 import type { ApiErrorCode, TemplateStatus } from "../api/types";
 import { PreviewEngineError } from "../preview/client";
@@ -12,8 +13,8 @@ export type UiErrorKind =
   | "TEMPLATE_NOT_FOUND"
   | "OBJECT_NOT_FOUND"
   | "OBJECT_ALREADY_EXISTS"
-  | "VALIDATOR_UNAVAILABLE"
   | "ENDPOINT_UNAVAILABLE"
+  | "SERVER_ERROR"
   | "PREVIEW_ENGINE"
   | "NETWORK"
   | "UNKNOWN";
@@ -21,9 +22,9 @@ export type UiErrorKind =
 export interface UiError {
   kind: UiErrorKind;
   message: string;
-  /** Field-level messages, present for VALIDATION_ERROR (e.g. "html: must not be blank"). */
+  /** Field-level messages, present for VALIDATION_ERROR (e.g. "html: no debe estar vacío"). */
   fieldDetails?: string[];
-  /** Present for INVALID_STATE_TRANSITION. */
+  /** Present for INVALID_STATE_TRANSITION, when the server's message names them. */
   from?: TemplateStatus;
   to?: TemplateStatus;
 }
@@ -35,7 +36,6 @@ const CODE_TO_KIND: Record<ApiErrorCode, UiErrorKind> = {
   TEMPLATE_NOT_FOUND: "TEMPLATE_NOT_FOUND",
   OBJECT_NOT_FOUND: "OBJECT_NOT_FOUND",
   OBJECT_ALREADY_EXISTS: "OBJECT_ALREADY_EXISTS",
-  VALIDATOR_UNAVAILABLE: "VALIDATOR_UNAVAILABLE",
 };
 
 const DEFAULT_MESSAGES: Record<UiErrorKind, string> = {
@@ -49,15 +49,15 @@ const DEFAULT_MESSAGES: Record<UiErrorKind, string> = {
   TEMPLATE_NOT_FOUND: "Esa plantilla o versión ya no existe.",
   OBJECT_NOT_FOUND: "El objeto referenciado ya no existe.",
   OBJECT_ALREADY_EXISTS: "Ese objeto ya existe.",
-  // Deliberately says "not saved": the author's work is intact, the check just
-  // could not run. Retrying once the service is back is the correct move, which
-  // is why this is worth telling apart from a plain failure.
-  VALIDATOR_UNAVAILABLE:
-    "El verificador de plantillas no está disponible, así que no se guardó nada. Tu trabajo no se perdió: vuelve a intentarlo en un momento.",
   // Names the deployment, because the template is not the problem and looking
   // for the fault in it is a wasted afternoon.
   ENDPOINT_UNAVAILABLE:
     "La API no expone este endpoint. El backend desplegado es más viejo que esta interfaz: hay que volver a desplegarlo.",
+  // A 5xx with no envelope is the service failing below its own handlers —
+  // MongoDB or S3 unreachable, typically. Says "retry" and "not your template"
+  // because both are true and the reader cannot see either from here.
+  SERVER_ERROR:
+    "El servidor de plantillas falló al procesar la petición (no es un problema de la plantilla). Vuelve a intentarlo en un momento.",
   // Says "local", twice over, because the instinct on any failure next to a
   // request is to go and look at the server — and here the server is not
   // involved at all. Nothing is wrong with the template and nothing is wrong
@@ -70,7 +70,7 @@ const DEFAULT_MESSAGES: Record<UiErrorKind, string> = {
 };
 
 /**
- * What a non-2xx means when the body carries no code we know.
+ * What a non-2xx means when the body is not an NTA envelope.
  *
  * A 404 is the case worth separating. Our own "that template does not exist"
  * always arrives as a TEMPLATE_NOT_FOUND envelope, so a 404 WITHOUT one did not
@@ -84,13 +84,50 @@ const DEFAULT_MESSAGES: Record<UiErrorKind, string> = {
  * looking for the fault in Jinja that renders perfectly well.
  */
 function fallbackKind(error: ApiError): UiErrorKind {
-  return error.status === 404 ? "ENDPOINT_UNAVAILABLE" : "UNKNOWN";
+  if (error.status === 404) return "ENDPOINT_UNAVAILABLE";
+  if (error.status >= 500) return "SERVER_ERROR";
+  return "UNKNOWN";
+}
+
+/**
+ * One VALIDATION_ERROR message, back into the per-field details it was made of.
+ *
+ * The server joins its violations with "; " into a single `message`. Splitting
+ * on every "; " would cut a detail that contains one (the action-format message
+ * does: "…punctuation); got \"x\""), so a split only happens where the next
+ * piece starts like a detail — a snake_case field name and a colon.
+ */
+export function splitValidationMessage(message: string | null): string[] {
+  if (!message) return [];
+  return message
+    .split(/; (?=[a-z][a-z0-9_]*: )/)
+    .map((detail) => detail.trim())
+    .filter((detail) => detail !== "");
+}
+
+const STATUS = "(DRAFT|SCHEDULED|ACTIVE|ARCHIVED)";
+const TRANSITION = new RegExp(`${STATUS}\\s*->\\s*${STATUS}`);
+
+/**
+ * The two states of an INVALID_STATE_TRANSITION.
+ *
+ * The envelope carries no structured from/to, only a message rendered from
+ * them ("Transición de estado inválida: ARCHIVED -> ACTIVE"). The enum values
+ * are not translated, so the pair is recoverable in either language; when it
+ * is not, nothing is invented.
+ */
+function parseTransition(message: string | null): { from?: TemplateStatus; to?: TemplateStatus } {
+  const match = message ? TRANSITION.exec(message) : null;
+  if (!match) return {};
+  return { from: match[1] as TemplateStatus, to: match[2] as TemplateStatus };
 }
 
 /**
  * Maps any error thrown by templatesApi calls into a normalized UiError.
  *
- * - ApiError instances (typed non-2xx responses) branch on `error.body.error`.
+ * - ApiError instances (typed non-2xx responses) branch on `error.body.code`,
+ *   which wire.ts derived from the envelope's `extended_code`. A body that was
+ *   not an envelope has no code and is classified by status alone.
  * - PreviewEngineError is pulled out BEFORE the catch-all, because it is the one
  *   failure in this app that has nothing to do with the network. It is thrown by
  *   the local render worker (Pyodide never booted, an asset 404'd, the worker
@@ -108,24 +145,26 @@ export function toUiError(error: unknown): UiError {
   }
 
   if (error instanceof ApiError) {
-    const kind = CODE_TO_KIND[error.body.error] ?? fallbackKind(error);
+    const kind = error.body.code ? CODE_TO_KIND[error.body.code] : fallbackKind(error);
 
     if (kind === "VALIDATION_ERROR") {
       return {
         kind,
         message: DEFAULT_MESSAGES[kind],
-        fieldDetails: error.body.details ?? [],
+        fieldDetails: splitValidationMessage(error.body.message),
       };
     }
 
     if (kind === "INVALID_STATE_TRANSITION") {
+      const { from, to } = parseTransition(error.body.message);
       return {
         kind,
         // The two states are enum values off the wire, so they stay exactly as
         // the server spelled them.
-        message: `No se puede pasar de ${error.body.from ?? "?"} a ${error.body.to ?? "?"}`,
-        from: error.body.from,
-        to: error.body.to,
+        message:
+          from && to ? `No se puede pasar de ${from} a ${to}` : DEFAULT_MESSAGES[kind],
+        from,
+        to,
       };
     }
 

@@ -15,6 +15,8 @@
 // compiler, and a contract change is a compile error in exactly one function.
 // Source of truth: the service's /v3/api-docs.
 import type {
+  ApiErrorBody,
+  ApiErrorCode,
   CommitRequest,
   CreateTemplateRequest,
   CreateTemplateResponse,
@@ -277,4 +279,42 @@ export function toWireListQuery(params: ListTemplatesParams): string {
   }
   const qs = search.toString();
   return qs ? `?${qs}` : "";
+}
+
+// ---- Errors ----
+//
+// Every business error comes in the PagoTIC envelope:
+//
+//   { code: 409, service_code: "NTA", extended_code: 4010, message: "…",
+//     datetime, cause, wiki }
+//
+// `extended_code` is the stable discriminator — clients are told to branch on
+// it, and `message` is translated by the server's Accept-Language. Anything
+// else that is not 2xx (a 500 from Mongo or S3, a 400 Spring raised before a
+// handler ran, a 404 for a path that does not exist) arrives as Spring's own
+// `{ timestamp, status, error, path }` body, or no JSON at all.
+
+const EXTENDED_CODES: Record<number, ApiErrorCode> = {
+  4000: "VALIDATION_ERROR",
+  4004: "OBJECT_NOT_FOUND",
+  4005: "TEMPLATE_NOT_FOUND",
+  4009: "OBJECT_ALREADY_EXISTS",
+  4010: "VERSION_NOT_EDITABLE",
+  4011: "INVALID_STATE_TRANSITION",
+};
+
+export const NTA_SERVICE_CODE = "NTA";
+
+/** Reads whatever came back on a non-2xx into one shape. Never throws. */
+export function fromWireError(raw: unknown): ApiErrorBody {
+  const body = raw != null && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+  const message = typeof body.message === "string" && body.message !== "" ? body.message : null;
+  const extendedCode = typeof body.extended_code === "number" ? body.extended_code : null;
+
+  if (body.service_code === NTA_SERVICE_CODE && extendedCode != null) {
+    return { code: EXTENDED_CODES[extendedCode] ?? null, extendedCode, message };
+  }
+  // Not ours: Spring's default body has no `message` worth showing (it says
+  // "Bad Request"), and its `error` must not be read as one of our codes.
+  return { code: null, extendedCode: null, message: null };
 }
