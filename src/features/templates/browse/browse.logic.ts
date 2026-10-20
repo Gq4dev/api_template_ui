@@ -18,6 +18,11 @@ import type {
   TemplateSummary,
 } from "../../../api/types";
 import { normalizeCollector } from "../../../lib/collector";
+import {
+  canonicalActionName,
+  storedSpellings,
+  type ActionSpelling,
+} from "../../../lib/actionNames";
 
 export interface TemplateGroup {
   templateKey: string;
@@ -88,6 +93,56 @@ export function groupsWithMixedActions(rows: TemplateSummary[]): string[] {
 }
 
 /**
+ * The marker for a name the catalogue writes more than one way.
+ *
+ * Said in the option label rather than hidden, because it is not cosmetic: the
+ * backend matches action/actionType EXACTLY on /resolve, so two spellings of one
+ * template are two different answers for whoever sends the mail. The reader
+ * should know before picking that the send-path panel will come back with more
+ * than one.
+ */
+export function spellingSuffix(count: number): string {
+  return count > 1 ? ` · ${count} formas de escritura` : "";
+}
+
+/** One canonical name, the raw spellings stored under it, and how many keys. */
+interface CanonicalBucket {
+  value: string;
+  /** Raw spelling → number of keys stored with it. */
+  spellings: Map<string, number>;
+  keys: number;
+}
+
+function bucketByCanonical(
+  groups: TemplateGroup[],
+  pick: (group: TemplateGroup) => string,
+): CanonicalBucket[] {
+  const buckets = new Map<string, CanonicalBucket>();
+  for (const group of groups) {
+    const raw = pick(group);
+    const value = canonicalActionName(raw);
+    // A name made only of punctuation has no identity — the backend refuses to
+    // create one — and its "" would collide with "not answered yet".
+    if (value === "") continue;
+    const bucket = buckets.get(value) ?? { value, spellings: new Map(), keys: 0 };
+    bucket.keys += 1;
+    bucket.spellings.set(raw, (bucket.spellings.get(raw) ?? 0) + 1);
+    buckets.set(value, bucket);
+  }
+  return [...buckets.values()].sort((a, b) => a.value.localeCompare(b.value));
+}
+
+/**
+ * The name shown for a bucket: the stored spelling when there is only one, so a
+ * catalogue written consistently in PAYMENT keeps reading PAYMENT; the canonical
+ * form when there are several, because picking either raw one would present the
+ * other as not existing.
+ */
+function bucketName(bucket: CanonicalBucket): string {
+  return bucket.spellings.size === 1 ? [...bucket.spellings.keys()][0] : bucket.value;
+}
+
+/**
  * The first step of the cascade: every action the catalogue knows about.
  *
  * Built from the catalogue rather than a fixed list because the catalogue is
@@ -95,30 +150,36 @@ export function groupsWithMixedActions(rows: TemplateSummary[]): string[] {
  * behind it would hand the reader a dead end two clicks deep, and one missing
  * from here would hide templates behind the control whose job is to find them.
  *
+ * GROUPED BY CANONICAL NAME, and the VALUE is that canonical name. The backend
+ * decides identity canonically — `PAYMENT` and `payment` derive the same
+ * templateKey — but stores and matches the raw spelling, and the live catalogue
+ * holds both. Offering them as two actions split one template across two
+ * branches of the cascade, each showing only some of its variants. One option
+ * per canonical name puts every variant back under one template, and the label
+ * says when that template is written more than one way.
+ *
  * The count rides in the label because it is the piece of information that
  * makes the choice before the click: "payment (12)" says this branch of the
  * tree is wide, "closing (1)" says the next two steps are already decided.
  */
 export function actionOptions(groups: TemplateGroup[]): SelectOption[] {
-  const counts = new Map<string, number>();
-  for (const group of groups) {
-    counts.set(group.action, (counts.get(group.action) ?? 0) + 1);
-  }
-
-  return [...counts]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([action, count]) => ({ value: action, label: `${action} (${count})` }));
+  return bucketByCanonical(groups, (group) => group.action).map((bucket) => ({
+    value: bucket.value,
+    label: `${bucketName(bucket)} (${bucket.keys})${spellingSuffix(bucket.spellings.size)}`,
+  }));
 }
 
 /**
  * The second step: the action types recorded under one action.
  *
- * `action` is compared exactly as stored rather than through any normalizer.
- * The value in play came out of {@link actionOptions}, which took it from these
- * same rows, so the only way the two could differ in case is if the catalogue
- * itself held two spellings — and in that case they are two distinct options
- * the reader can see and choose between, not one option this function is
- * entitled to merge behind their back.
+ * `action` is compared CANONICALLY, and the result is grouped the same way. It
+ * used to be compared exactly as stored, on the theory that two spellings in
+ * the catalogue were two distinct options the reader could see and choose
+ * between. The live data retired that theory: the spellings are not a choice
+ * anyone made, they are drift — the same template written PAYMENT by one caller
+ * and payment by another — and the backend itself treats them as one identity.
+ * Exact comparison hid half of a template's variants behind whichever spelling
+ * the reader did not pick.
  *
  * Empty in, empty out: with no action chosen there is no subset to describe,
  * and inventing one would offer action types that belong to other actions.
@@ -128,19 +189,15 @@ export function actionTypeOptions(
   action: string,
 ): SelectOption[] {
   if (action === "") return [];
+  const wanted = canonicalActionName(action);
 
-  const counts = new Map<string, number>();
-  for (const group of groups) {
-    if (group.action !== action) continue;
-    counts.set(group.actionType, (counts.get(group.actionType) ?? 0) + 1);
-  }
-
-  return [...counts]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([actionType, count]) => ({
-      value: actionType,
-      label: `${actionType} (${count})`,
-    }));
+  return bucketByCanonical(
+    groups.filter((group) => canonicalActionName(group.action) === wanted),
+    (group) => group.actionType,
+  ).map((bucket) => ({
+    value: bucket.value,
+    label: `${bucketName(bucket)} (${bucket.keys})${spellingSuffix(bucket.spellings.size)}`,
+  }));
 }
 
 /** One dropdown heading and the names under it, in Mantine's grouped shape. */
@@ -258,7 +315,13 @@ export function catalogueCollectorGroups(
     if (name === "") continue;
 
     anywhere.add(name);
-    if (group.action === action && group.actionType === actionType) {
+    // Canonical, like the cascade that produced `action`/`actionType`: a variant
+    // stored as `payment` is stored under the template the reader picked as
+    // PAYMENT, and must not be relegated to "known elsewhere".
+    if (
+      canonicalActionName(group.action) === canonicalActionName(action) &&
+      canonicalActionName(group.actionType) === canonicalActionName(actionType)
+    ) {
       storedHere.add(name);
     }
   }
@@ -450,25 +513,33 @@ function hasVariantFor(
 }
 
 /**
- * Splits values into the two headings, dropping an empty one.
+ * Splits options into the two headings, dropping an empty one.
  *
  * An empty heading is dropped for the reason given in
  * {@link catalogueCollectorGroups}: Mantine draws the heading anyway, and a lone
  * "Con variante propia" with nothing under it asserts the opposite of the truth.
  */
 function markByVariant(
-  values: string[],
+  options: SelectOption[],
   hasVariant: (value: string) => boolean,
 ): SelectOptionGroup[] {
   const withOwn: SelectOption[] = [];
   const without: SelectOption[] = [];
-  for (const value of values) {
-    (hasVariant(value) ? withOwn : without).push({ value, label: value });
+  for (const option of options) {
+    (hasVariant(option.value) ? withOwn : without).push(option);
   }
   const data: SelectOptionGroup[] = [];
   if (withOwn.length > 0) data.push({ group: WITH_OWN_VARIANT, items: withOwn });
   if (without.length > 0) data.push({ group: WITHOUT_OWN_VARIANT, items: without });
   return data;
+}
+
+/** Canonical buckets as plain options: the name and its spelling marker, no count. */
+function plainOptions(buckets: CanonicalBucket[]): SelectOption[] {
+  return buckets.map((bucket) => ({
+    value: bucket.value,
+    label: `${bucketName(bucket)}${spellingSuffix(bucket.spellings.size)}`,
+  }));
 }
 
 /**
@@ -481,7 +552,9 @@ function markByVariant(
  * The headings carry the distinction instead of the filter.
  *
  * An action lands under "Con variante propia" when the collector has a variant
- * for AT LEAST ONE of its action types; the next step says which.
+ * for AT LEAST ONE of its action types; the next step says which. Grouped and
+ * matched canonically, like {@link actionOptions}, so a variant stored as
+ * `payment` marks the same option as one stored as `PAYMENT`.
  *
  * Plain names, no counts. The counts in {@link actionOptions} count keys across
  * every collector, which under a chosen collector would describe other clients'
@@ -497,18 +570,19 @@ export function collectorFirstActionData(
   const name = normalizeCollector(collector);
   if (name === "") return actionOptions(groups);
 
-  const actions = [...new Set(groups.map((group) => group.action))].sort((a, b) =>
-    a.localeCompare(b),
-  );
-  return markByVariant(actions, (action) =>
-    groups.some((group) => group.action === action && hasVariantFor(group, name)),
+  return markByVariant(
+    plainOptions(bucketByCanonical(groups, (group) => group.action)),
+    (action) =>
+      groups.some(
+        (group) => canonicalActionName(group.action) === action && hasVariantFor(group, name),
+      ),
   );
 }
 
 /**
  * The Action type step under a chosen collector and action — same rules one
  * level down: every type of the action, marked by whether this collector has a
- * variant stored for that exact pair. Empty until an action is chosen.
+ * variant stored for that exact canonical pair. Empty until an action is chosen.
  */
 export function collectorFirstActionTypeData(
   groups: TemplateGroup[],
@@ -519,12 +593,15 @@ export function collectorFirstActionTypeData(
   const name = normalizeCollector(collector);
   if (name === "") return actionTypeOptions(groups, action);
 
-  const underAction = groups.filter((group) => group.action === action);
-  const types = [...new Set(underAction.map((group) => group.actionType))].sort((a, b) =>
-    a.localeCompare(b),
-  );
-  return markByVariant(types, (actionType) =>
-    underAction.some((group) => group.actionType === actionType && hasVariantFor(group, name)),
+  const wanted = canonicalActionName(action);
+  const underAction = groups.filter((group) => canonicalActionName(group.action) === wanted);
+  return markByVariant(
+    plainOptions(bucketByCanonical(underAction, (group) => group.actionType)),
+    (actionType) =>
+      underAction.some(
+        (group) =>
+          canonicalActionName(group.actionType) === actionType && hasVariantFor(group, name),
+      ),
   );
 }
 
@@ -760,10 +837,14 @@ export function genericDelivery(
  * the stored fields asks the data what it is instead of predicting what it
  * should have been called.
  *
- * The collector comparison is the one place case matters: the server
- * canonicalizes case on the way in, so `BBVA` and `bbva` are one client, and a
- * lookup that disagreed would report "no such template" about a row sitting
- * right there in the list the reader just picked from.
+ * Every part is compared the way the server decides IDENTITY, which is not the
+ * way it stores it. The collector is canonicalized on the way in, so `BBVA` and
+ * `bbva` are one client. Action and action type are stored RAW but identified
+ * canonically (`canonicalActionName`) — the live catalogue holds PAYMENT and
+ * payment under keys derived from the same `payment_approved` — and the cascade
+ * hands this function canonical names. A lookup that compared any part exactly
+ * would report "no such template" about a row sitting right there in the list
+ * the reader just picked from.
  *
  * A BLANK collector means the generic, and it is an ANSWER rather than a gap.
  * That is the API's rule, not ours — "collector absent or empty" is how every
@@ -792,10 +873,15 @@ export function findGroup(
 
   const normalized = normalizeCollector(collector);
   const wanted = normalized === "" ? null : normalized;
+  const wantedAction = canonicalActionName(action);
+  const wantedType = canonicalActionName(actionType);
 
   return (
     groups.find((group) => {
-      if (group.action !== action || group.actionType !== actionType) {
+      if (
+        canonicalActionName(group.action) !== wantedAction ||
+        canonicalActionName(group.actionType) !== wantedType
+      ) {
         return false;
       }
       if (wanted === null) return group.collector == null;
@@ -955,16 +1041,205 @@ export interface ResolutionSelection {
  * server canonicalizes case and the value stored in the result was trimmed on
  * the way out: `BBVA` and `bbva` are one client, and a case-sensitive compare
  * would discard a perfectly valid answer as if it belonged to someone else.
- * Action and action type are trimmed for the same reason — the mutation trims
- * them before sending, so the round trip must not turn that into a mismatch.
+ * Action and action type are compared CANONICALLY. The selection on screen
+ * holds canonical names, while a resolution is asked in a raw stored spelling —
+ * `PAYMENT` when the catalogue writes it that way — because the send path
+ * matches exactly. Both name the same template, so an exact compare would throw
+ * away every answer asked in a spelling that differs from the canonical one.
  */
 export function resolutionMatchesSelection(
   asked: ResolutionSelection,
   current: ResolutionSelection,
 ): boolean {
   return (
-    asked.action.trim() === current.action.trim() &&
-    asked.actionType.trim() === current.actionType.trim() &&
+    canonicalActionName(asked.action) === canonicalActionName(current.action) &&
+    canonicalActionName(asked.actionType) === canonicalActionName(current.actionType) &&
     normalizeCollector(asked.collector) === normalizeCollector(current.collector)
   );
+}
+
+/**
+ * The raw spellings the send path must be asked in for one canonical pair.
+ *
+ * WHY MORE THAN ONE CALL CAN BE RIGHT. /resolve matches action/actionType
+ * exactly as stored. When the catalogue holds a pair in two spellings — live,
+ * the generic and most variants as PAYMENT/APPROVED, the dell variant as
+ * payment/approved — a sender's answer depends on which spelling it sends:
+ * PAYMENT for dell silently falls back to the generic, payment for bbva 404s.
+ * Asking in only one spelling would report one of those as the truth.
+ *
+ * BOUNDED BY THE CATALOGUE: exactly the distinct (action, actionType) raw pairs
+ * stored under the canonical pair, across every collector, most common first —
+ * never a combination nobody stored. With a single spelling it is one entry and
+ * the panel makes the same single call it always made.
+ *
+ * With nothing stored (the cascade cannot produce that, but a caller could) the
+ * pair itself is returned, so the question still gets asked once.
+ */
+export function resolveSpellings(
+  groups: TemplateGroup[],
+  action: string,
+  actionType: string,
+): ActionSpelling[] {
+  if (action === "" || actionType === "") return [];
+  const stored = storedSpellings(groups, action, actionType);
+  if (stored.length === 0) return [{ action, actionType }];
+  return stored.map((spelling) => ({
+    action: spelling.action,
+    actionType: spelling.actionType,
+  }));
+}
+
+/**
+ * The most spellings of one pair the page will fan out to.
+ *
+ * Every spelling costs one /resolve call (plus a local render) and one
+ * /collectors call. The catalogue bounds that list today — the live drift is two
+ * spellings — but nothing bounds the catalogue, and a pair written ten ways
+ * would turn one button press into twenty requests. Five covers every realistic
+ * drift and keeps the worst case small; the page says when it stopped short.
+ */
+export const MAX_QUERIED_SPELLINGS = 5;
+
+/**
+ * The spellings actually queried, and how many were left out.
+ *
+ * The most common spellings are the ones kept — the list arrives sorted that
+ * way — because they are the ones the most keys, and so most senders, use.
+ */
+export function capSpellings(
+  spellings: ActionSpelling[],
+  max: number = MAX_QUERIED_SPELLINGS,
+): { queried: ActionSpelling[]; omitted: number } {
+  return {
+    queried: spellings.slice(0, max),
+    omitted: Math.max(0, spellings.length - max),
+  };
+}
+
+/** One spelling's inventory query, reduced to what the merge needs. */
+export interface InventoryAnswer {
+  data: CollectorsInventoryResponse | null;
+  isLoading: boolean;
+  isError: boolean;
+}
+
+export interface MergedInventory {
+  /** Null while any spelling is still on its first load, or when none answered. */
+  inventory: CollectorsInventoryResponse | null;
+  /**
+   * Normalized collectors whose answer DIFFERS by spelling: they appear in more
+   * than one answer and disagree on `servable` or `version`.
+   */
+  divergentCollectors: Set<string>;
+  /** The spellings that answered disagree about the generic. */
+  genericDivergent: boolean;
+  isLoading: boolean;
+  /** Any spelling failed — the merge is missing that spelling's answer. */
+  isError: boolean;
+}
+
+function instantOf(at: string): number {
+  const parsed = Date.parse(at);
+  return Number.isNaN(parsed) ? Number.POSITIVE_INFINITY : parsed;
+}
+
+/**
+ * One Collector list out of one /collectors answer per stored spelling.
+ *
+ * WHY THERE IS MORE THAN ONE ANSWER. /collectors matches action/actionType
+ * exactly as stored. Asked only as PAYMENT/APPROVED, the live API leaves out
+ * dell, whose variant is stored as payment/approved — the list showed four
+ * collectors with variants when there are five. Each stored spelling is asked
+ * separately (the same bounded set the resolve panel uses) and the answers are
+ * merged here.
+ *
+ * THE MERGE RULES, each chosen so the merged list claims no more than the
+ * answers behind it:
+ *
+ * - Collectors are merged by NORMALIZED name and counted once. The entry kept
+ *   is the first spelling's (the most common one), and a collector that
+ *   appears in several answers with a different `servable` or `version` is
+ *   flagged: its delivery depends on how the sender spells the action, and the
+ *   option says so.
+ * - The generic is the first answer's non-null generic, and disagreement
+ *   (present in one, absent or different in another) is flagged too.
+ * - `at` is the OLDEST instant among the answers: the merged list is only as
+ *   current as its least current part.
+ * - Any failed spelling marks the merge as errored, which the page shows as
+ *   stale — the list is missing that spelling's collectors.
+ * - While any spelling is still on its FIRST load there is no merge at all, so
+ *   the list never appears half-built and then grows.
+ *
+ * With a single spelling the answer passes through untouched.
+ */
+export function mergeInventoryAnswers(answers: InventoryAnswer[]): MergedInventory {
+  const isLoading = answers.some((answer) => answer.isLoading);
+  const isError = answers.some((answer) => answer.isError);
+  const empty = {
+    divergentCollectors: new Set<string>(),
+    genericDivergent: false,
+    isLoading,
+    isError,
+  };
+
+  const arrived = answers
+    .map((answer) => answer.data)
+    .filter((data): data is CollectorsInventoryResponse => data != null);
+  if (isLoading || arrived.length === 0) return { inventory: null, ...empty };
+  if (answers.length === 1) return { inventory: arrived[0], ...empty };
+
+  const byName = new Map<
+    string,
+    { entry: CollectorInventoryEntry; servable: Set<boolean>; versions: Set<number> }
+  >();
+  for (const data of arrived) {
+    for (const entry of data.collectors) {
+      const name = normalizeCollector(entry.collector);
+      const seen = byName.get(name);
+      if (seen) {
+        seen.servable.add(entry.servable);
+        seen.versions.add(entry.version);
+      } else {
+        byName.set(name, {
+          entry,
+          servable: new Set([entry.servable]),
+          versions: new Set([entry.version]),
+        });
+      }
+    }
+  }
+
+  const divergentCollectors = new Set<string>();
+  for (const [name, seen] of byName) {
+    if (seen.servable.size > 1 || seen.versions.size > 1) divergentCollectors.add(name);
+  }
+
+  // Re-sorted, unlike a single answer: each server list is sorted, but their
+  // concatenation is not, and the option list must stay scannable.
+  const collectors = [...byName.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([, seen]) => seen.entry);
+
+  const generics = arrived.map((data) => data.generic);
+  const generic = generics.find((entry) => entry != null) ?? null;
+  const genericDivergent = generics.some(
+    (entry) =>
+      (entry == null) !== (generic == null) ||
+      (entry != null &&
+        generic != null &&
+        (entry.servable !== generic.servable || entry.version !== generic.version)),
+  );
+
+  const oldest = arrived.reduce((best, data) =>
+    instantOf(data.at) < instantOf(best.at) ? data : best,
+  );
+
+  return {
+    inventory: { ...arrived[0], at: oldest.at, collectors, generic },
+    divergentCollectors,
+    genericDivergent,
+    isLoading,
+    isError,
+  };
 }

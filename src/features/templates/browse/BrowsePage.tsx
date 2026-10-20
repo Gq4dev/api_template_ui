@@ -4,6 +4,7 @@ import {
   Alert,
   Badge,
   Button,
+  Code,
   Group,
   Loader,
   Paper,
@@ -17,10 +18,14 @@ import type { SelectProps } from "@mantine/core";
 import { IconPlus } from "@tabler/icons-react";
 import { PageHeader } from "../../../app/PageHeader";
 import { fromVersionHref, isPublishedStatus } from "../create/createForm.logic";
-import { useTemplatesList } from "../../../queries/useTemplatesList";
+import {
+  CATALOGUE_PAGE_SIZE,
+  MAX_CATALOGUE_PAGES,
+  useFullCatalogue,
+} from "../../../queries/fullCatalogue";
 import { useRowPreview } from "../../../queries/useRowPreview";
 import { useResolveByAction } from "../../../queries/useResolveByAction";
-import { useCollectorsInventory } from "../../../queries/useCollectorsInventory";
+import { useCollectorsInventories } from "../../../queries/useCollectorsInventory";
 import { useArchiveTemplate } from "../../../queries/useArchiveTemplate";
 import { usePublishTemplate } from "../../../queries/usePublishTemplate";
 import { toUiError } from "../../../lib/errors";
@@ -28,6 +33,8 @@ import { collectorLabel, normalizeCollector } from "../../../lib/collector";
 import type { PreviewVariant } from "../../../preview/protocol";
 import type { CollectorInventoryEntry } from "../../../api/types";
 import { RenderedEmail } from "../RenderedEmail";
+import { ResolutionAnswer } from "./ResolutionAnswer";
+import { STATUS_COLOR, collectorBadgeColor } from "./browseStyle";
 import {
   actionOptions,
   actionTypeOptions,
@@ -46,33 +53,16 @@ import {
   inventoryCollectorData,
   inventoryFreshness,
   resolutionMatchesSelection,
-  resolutionOutcome,
+  resolveSpellings,
+  capSpellings,
+  mergeInventoryAnswers,
+  MAX_QUERIED_SPELLINGS,
   selectDataValues,
   switchBrowseMode,
   versionOptions,
   type BrowseMode,
 } from "./browse.logic";
 
-// One page big enough to hold the whole catalogue. The cascade needs every key
-// at once — each step is built by counting the keys behind it, and a paginated
-// list would make those counts, and the options themselves, silently partial.
-const ALL = { page: 0, size: 500 } as const;
-
-const STATUS_COLOR: Record<string, string> = {
-  ACTIVE: "green",
-  SCHEDULED: "blue",
-  DRAFT: "gray",
-  ARCHIVED: "dark",
-};
-
-// Two different things, so two different colours. A generic template is the
-// baseline everyone gets; a collector variant is an exception carved out for one
-// client. Rendering both in the same neutral badge would make the reader compare
-// the text to tell them apart, which is the one thing this badge exists to spare
-// them.
-function collectorBadgeColor(collector: string | null): string {
-  return collector ? "grape" : "gray";
-}
 
 /**
  * The instant the inventory was computed at, in the reader's own clock.
@@ -139,7 +129,11 @@ function formatInstant(iso: string): string {
  * one triple and are told apart by which panel answers them.
  */
 export function BrowsePage() {
-  const listQuery = useTemplatesList(ALL);
+  // The whole catalogue, every page. The cascade needs every key at once — each
+  // step is built by counting the keys behind it, and a partial list would make
+  // those counts, and the options themselves, silently partial. Truncation (the
+  // page cap) is reported below rather than hidden.
+  const listQuery = useFullCatalogue();
   const preview = useRowPreview();
   const resolve = useResolveByAction();
   const archiveMutation = useArchiveTemplate();
@@ -186,15 +180,47 @@ export function BrowsePage() {
     Asked without `at`, which means now. A picker for historical instants is the
     next work item; the hook and the key already take one.
   */
-  const inventoryQuery = useCollectorsInventory(action, actionType);
-  const inventory = inventoryQuery.data ?? null;
+  /*
+    ASKED IN A STORED SPELLING, NOT IN THE CANONICAL NAME ON SCREEN.
+
+    The selection holds canonical names (see `actionOptions`), but the backend
+    matches action/actionType on /collectors exactly as stored: sending
+    `payment` for a pair stored as `PAYMENT` would come back empty and claim that
+    nobody has a variant (live, dell went missing from the list exactly this
+    way). So the inventory is asked once per stored spelling — the same bounded,
+    capped set the send-path panel resolves in — and the answers are merged by
+    collector (`mergeInventoryAnswers`). One spelling is one call, as before.
+
+    Asked in BOTH browse orders. The collector-first list does not read it, but
+    the delivery notices under the controls — no generic, no variants — do, and
+    they are just as true whichever order the triple was entered in. The
+    freshness line follows the same rule, so none of them appears undated.
+  */
+  const allSpellings = useMemo(
+    () => resolveSpellings(groups, action, actionType),
+    [groups, action, actionType],
+  );
+  // Capped: see MAX_QUERIED_SPELLINGS. `spellings` is what is actually queried.
+  const { queried: spellings, omitted: omittedSpellings } = useMemo(
+    () => capSpellings(allSpellings),
+    [allSpellings],
+  );
+  const omittedSpellingsNote =
+    omittedSpellings > 0
+      ? `Esta plantilla tiene ${omittedSpellings} ${
+          omittedSpellings === 1 ? "forma" : "formas"
+        } de escritura más que no se consultaron: se consultan como máximo ${MAX_QUERIED_SPELLINGS}.`
+      : null;
+  const mergedInventory = mergeInventoryAnswers(useCollectorsInventories(spellings));
+  const inventory = mergedInventory.inventory;
+  const divergentCollectors = mergedInventory.divergentCollectors;
 
   // Where the options came from, and therefore what the page may claim about
   // them. See `collectorSource` — the fallback is not an error state.
   const source = collectorSource({
     action,
     actionType,
-    isLoading: inventoryQuery.isLoading,
+    isLoading: mergedInventory.isLoading,
     inventory,
   });
 
@@ -204,7 +230,8 @@ export function BrowsePage() {
   // read `isError` to be able to tell the reader which of the two they have.
   const freshness = inventoryFreshness({
     inventory,
-    isError: inventoryQuery.isError,
+    // Any spelling's failure: the merged list is missing that spelling's answer.
+    isError: mergedInventory.isError,
   });
 
   // What a collector with no servable version of its own actually receives.
@@ -321,6 +348,14 @@ export function BrowsePage() {
           <Text size="xs" c="dimmed" style={{ whiteSpace: "nowrap" }}>
             v{entry.version} · {entry.status}
           </Text>
+          {/* The version/status shown is the most common spelling's; this
+              collector gets something else when the sender spells the action
+              another way. */}
+          {divergentCollectors.has(normalizeCollector(option.value)) ? (
+            <Badge size="xs" color="orange" variant="light">
+              según escritura
+            </Badge>
+          ) : null}
           <Badge size="xs" color={badge.color} variant="light">
             {badge.text}
           </Badge>
@@ -511,15 +546,12 @@ export function BrowsePage() {
    * wait until the reader says they have finished asking.
    */
   function handleResolve() {
-    resolve.mutate({
-      action: action.trim(),
-      actionType: actionType.trim(),
-      collector,
-      variant,
-    });
+    // Every stored spelling of the pair rather than the canonical name on
+    // screen: the send path matches exactly. See `resolveSpellings`.
+    resolve.mutate({ spellings, collector, variant });
   }
 
-  const canResolve = cascadeAnswered;
+  const canResolve = cascadeAnswered && spellings.length > 0;
 
   const resolveError = resolve.error ? toUiError(resolve.error) : null;
 
@@ -552,24 +584,8 @@ export function BrowsePage() {
       ? resolve.data
       : null;
 
-  // Computed once, read by every banner below. See the block comment above the
-  // banners for why this is a four-way question and not a boolean.
-  const outcome = resolved
-    ? resolutionOutcome(resolved.content, resolved.requestedCollector)
-    : null;
-
-  /*
-    Three states, not two, and the third is the one worth naming: the API
-    answered and the LOCAL engine did not run. `render` is null exactly then,
-    and `engineErrorMessage` says why — see useResolveByAction. Everything else
-    on this panel is built from `content`, so it keeps rendering: the reader
-    still learns which version the send path picks and whether it fell back,
-    and only the mail itself is missing.
-  */
-  const resolvedRender = resolved?.render?.ok ? resolved.render : null;
-  const resolvedFailure =
-    resolved?.render && !resolved.render.ok ? resolved.render : null;
-  const resolvedEngineError = resolved?.engineErrorMessage ?? null;
+  // Each answer's banners, badges and render are decided inside
+  // ResolutionAnswer, once per stored spelling.
 
   const listError = listQuery.error ? toUiError(listQuery.error) : null;
   const previewError = preview.error ? toUiError(preview.error) : null;
@@ -769,8 +785,14 @@ export function BrowsePage() {
                   other order: the headings must not be ellipsed away. */}
               <Select
                 label="Action"
+                // Same empty-catalogue wording as the other order: an empty
+                // box would read as "still loading" forever.
                 placeholder={
-                  collectorPicked ? "Selecciona una acción" : "Selecciona primero Collector"
+                  !listQuery.isLoading && actions.length === 0
+                    ? "No hay plantillas en el catálogo"
+                    : collectorPicked
+                      ? "Selecciona una acción"
+                      : "Selecciona primero Collector"
                 }
                 data={collectorFirstActions}
                 value={action === "" ? null : action}
@@ -778,7 +800,7 @@ export function BrowsePage() {
                 searchable
                 allowDeselect={false}
                 nothingFoundMessage="Ninguna acción coincide"
-                disabled={!collectorPicked}
+                disabled={!collectorPicked || actions.length === 0}
                 comboboxProps={{ width: 280, position: "bottom-start" }}
                 w={220}
               />
@@ -838,6 +860,12 @@ export function BrowsePage() {
 
         {/* Below the row, not as the field's description, for the alignment
             reason spelled out in the next comment. */}
+        {cascadeAnswered && omittedSpellingsNote ? (
+          <Text size="xs" c="dimmed" mt="sm">
+            {omittedSpellingsNote}
+          </Text>
+        ) : null}
+
         {mode === "COLLECTOR_FIRST" ? (
           <Text size="xs" c="dimmed" mt="sm">
             Solo se listan los collectors con al menos una variante guardada en el
@@ -868,14 +896,29 @@ export function BrowsePage() {
           was true when it was fetched, and the honest way to say that is to
           print the server's instant rather than the word "ahora".
         */}
-        {/* Both notices below describe the template-first collector list; the
-            collector-first list is always catalogue-derived and has its hint. */}
-        {mode === "TEMPLATE_FIRST" && source === "INVENTORY" && inventory ? (
+        {/*
+          ONE RULE FOR THE TIMESTAMP: it follows the inventory, not the mode.
+          The inventory is fetched in both orders because the delivery notices
+          below — the red "no generic" alert and the empty-inventory line —
+          read it in both, and neither may appear without the instant it was
+          true at and whether a refresh has failed since. The catalogue-fallback
+          notice right after stays template-first only: it describes that
+          order's Collector list, and the collector-first list has its own hint.
+        */}
+        {source === "INVENTORY" && inventory ? (
           <Text size="xs" c="dimmed" mt="sm">
             Inventario de collectors vigente al {formatInstant(inventory.at)}
             {inventory.collectors.length === 1
               ? " · 1 collector con variante propia"
               : ` · ${inventory.collectors.length} collectors con variante propia`}
+            {/* Merged answers are dated by the OLDEST of them. */}
+            {spellings.length > 1
+              ? `, reunidos de ${spellings.length} formas de escritura${
+                  mergedInventory.genericDivergent
+                    ? " (la genérica también difiere según la escritura)"
+                    : ""
+                }`
+              : ""}
             .
             {/*
               THE DIFFERENCE BETWEEN "AS OF HH:MM" AND "AS OF HH:MM AND I COULD
@@ -1028,6 +1071,17 @@ export function BrowsePage() {
         >
           {mixed.join(", ")} — la key debería identificar una sola Action, así que
           conviene revisarlo.
+        </Alert>
+      ) : null}
+
+      {/* Never a silent partial list: every option and count above is built
+          from these rows. */}
+      {listQuery.data?.truncated ? (
+        <Alert color="yellow" title="No se leyó el catálogo completo" mt="md">
+          Se leyeron {listQuery.data.content.length} de{" "}
+          {listQuery.data.totalElements} versiones (se leen como máximo{" "}
+          {MAX_CATALOGUE_PAGES * CATALOGUE_PAGE_SIZE}). Las opciones y los
+          recuentos de arriba pueden estar incompletos.
         </Alert>
       ) : null}
 
@@ -1333,241 +1387,73 @@ export function BrowsePage() {
             </Text>
           ) : null}
 
-          {/* The server's own 400 on a malformed collector. It is shown as a
-              validation error and NEVER as a template: the API refuses to guess
-              what was meant, and showing the generic here would answer a
-              question nobody asked. */}
-          {resolveError ? (
-            <Alert
-              color="red"
-              title={
-                resolveError.kind === "VALIDATION_ERROR"
-                  ? "Esa consulta no es válida"
-                  : "No se pudo resolver"
-              }
-            >
-              <Stack gap={4}>
-                <Text size="sm">{resolveError.message}</Text>
-                {(resolveError.fieldDetails ?? []).map((detail) => (
-                  <Text key={detail} size="sm" ff="monospace">
-                    {detail}
-                  </Text>
-                ))}
-                {resolveError.kind === "TEMPLATE_NOT_FOUND" ? (
-                  <Text size="xs" c="dimmed">
-                    No hay nada vigente para esta Action, ni siquiera una
-                    plantilla genérica. Que falte una variante de collector nunca
-                    llegaría hasta aquí por sí solo.
-                  </Text>
-                ) : null}
-              </Stack>
-            </Alert>
+          {/* The server's own 400 on a malformed collector, or any failure of
+              the single-spelling call, rendered by the same component that
+              renders an answer — see ResolutionAnswer. With several spellings
+              the mutation never rejects: each spelling's failure is reported
+              under its own heading, so one 404 cannot hide another spelling's
+              perfectly good answer. */}
+          {resolve.error ? (
+            <ResolutionAnswer result={null} error={resolve.error} />
           ) : null}
 
           {/*
-            ABSENT IS NOT FALSE — which is why these banners switch on a
-            four-way outcome instead of reading one boolean.
+            MORE THAN ONE STORED SPELLING — the catalogue's drift, made visible.
 
-            These used to be two mutually exclusive ternaries on
-            `content.fallbackToGeneric`, so a response that simply lacked the
-            field was read as "false", and "false" was rendered as "no, it did
-            not fall back — this collector has its own version". That is the
-            single most dangerous sentence this panel can print, and it was
-            printed over live traffic: the collector dimension is not deployed
-            yet, the running API ignores the `collector` parameter outright, and
-            it answers with a body carrying neither `collector` nor
-            `fallbackToGeneric`. The badge row below, which derives from
-            `content.collector`, correctly read GENERIC while the banner
-            immediately above it claimed the opposite.
-
-            "I did not answer your question" is its own outcome, and it gets its
-            own banner that claims nothing.
+            The backend stores action/actionType exactly as they were sent and
+            matches them exactly on /resolve; only the templateKey is derived
+            canonically. So `PAYMENT/APPROVED` and `payment/approved` are ONE
+            template on this page and TWO questions to the send path. Live, the
+            dell variant stored as `payment` is invisible to a sender asking for
+            `PAYMENT`, who silently receives the generic. There is no single
+            honest answer, so the panel asks once per stored spelling — never
+            more than the spellings the catalogue holds for this pair — and
+            shows each answer under the spelling that produced it.
           */}
-
-          {/*
-            The single most important element in this feature.
-
-            An operator who asked for Santander and is shown the generic without
-            being told will go and fix the wrong document — and the fix will
-            land on every client instead of the one they meant. So this names
-            both halves explicitly: the collector they asked for, and the
-            template they are in fact looking at. A version that is DRAFT,
-            archived, or scheduled for next month is not servable and falls back
-            exactly like one that was never authored, which is why the reason is
-            spelled out rather than left to be inferred from a missing row.
-          */}
-          {resolved && outcome === "FELL_BACK" ? (
+          {resolved && resolved.answers.length > 1 ? (
             <Alert
               color="yellow"
-              title={`No hay plantilla vigente para “${normalizeCollector(resolved.requestedCollector)}” — se muestra la genérica`}
-            >
-              <Stack gap={4}>
-                <Text size="sm">
-                  Pediste{" "}
-                  <strong>
-                    {normalizeCollector(resolved.requestedCollector)}
-                  </strong>
-                  , que ahora mismo no tiene ninguna versión publicada y vigente.
-                  Lo que aparece abajo es la plantilla GENÉRICA{" "}
-                  <strong>{resolved.content.templateKey}</strong>: la que recibe
-                  todo cliente que no tenga una versión propia, y la que hoy se le
-                  está enviando a ese cliente.
-                </Text>
-                <Text size="xs" c="dimmed">
-                  Una variante puede existir y aun así no enviarse: un borrador,
-                  una versión archivada o una programada para más adelante caen
-                  todas en la genérica igual. Si editas lo que aparece abajo,
-                  cambias el mail de todos, no solo el de{" "}
-                  {normalizeCollector(resolved.requestedCollector)}.
-                </Text>
-              </Stack>
-            </Alert>
-          ) : null}
-
-          {resolved && outcome === "COLLECTOR_SERVED" ? (
-            <Alert
-              color="teal"
-              title={`${normalizeCollector(resolved.requestedCollector)} tiene su propia versión`}
+              title="Esta plantilla está escrita de más de una forma en el catálogo; el resultado depende de cómo la pida el emisor"
             >
               <Text size="sm">
-                A este collector se le está enviando{" "}
-                <strong>{resolved.content.templateKey}</strong>, no la genérica.
-                Si la editas, solo lo afectas a él.
+                El servicio de envío compara Action y Action type tal como
+                llegan, sin normalizarlos. Abajo va una respuesta por cada forma
+                guardada: lo que recibe un cliente depende de cuál de ellas use
+                quien envía el mail.
               </Text>
             </Alert>
           ) : null}
 
-          {/*
-            The honest "I don't know". It must not be mistaken for either of the
-            two banners above, which is why it is neither yellow nor teal and
-            why every sentence in it is about the API rather than about the
-            template: the one thing this build cannot tell the reader is whether
-            this collector has a variant, and pretending otherwise in either
-            direction is the bug.
-          */}
-          {resolved && outcome === "UNREPORTED" ? (
-            <Alert
-              color="orange"
-              title={`Esta versión de la API no puede responder por “${normalizeCollector(resolved.requestedCollector)}”`}
-            >
-              <Stack gap={4}>
-                <Text size="sm">
-                  El servidor no informó la dimensión collector en absoluto.
-                  Ignoró el collector que pediste —{" "}
-                  <strong>
-                    {normalizeCollector(resolved.requestedCollector)}
-                  </strong>{" "}
-                  — y respondió como si no se hubiera pedido ninguno, así que lo
-                  que aparece abajo es la plantilla GENÉRICA{" "}
-                  <strong>{resolved.content.templateKey}</strong>. Desde aquí no
-                  se puede saber si este collector tiene una versión propia:
-                  tómalo como desconocido, no como un no.
-                </Text>
-                <Text size="xs" c="dimmed">
-                  Es lo esperable hasta que se despliegue el soporte de collector
-                  en el backend. La resolución de abajo es el comportamiento
-                  previo a collector: la misma respuesta que daba este endpoint
-                  antes de que existiera la dimensión.
-                </Text>
-              </Stack>
-            </Alert>
+          {resolved && omittedSpellingsNote ? (
+            <Text size="xs" c="dimmed">
+              {omittedSpellingsNote}
+            </Text>
           ) : null}
 
-          {/*
-            Badges only — no Edit draft, no Publish, no Archive, and this is not
-            an omission to be tidied up later.
-
-            On a fallback the version on screen is the GENERIC one. Offering to
-            edit it right where the reader asked about santander is precisely the
-            mistake the yellow banner above exists to prevent: they came to fix
-            one client's mail and the button under their cursor would change
-            everybody's. Acting on a version is the catalogue's job, where what is
-            named on screen is what the buttons touch — so the reader goes back up
-            and names the template they actually mean.
-          */}
-          {resolved ? (
-            <Group gap="xs" align="center">
-              <Badge
-                color={STATUS_COLOR[resolved.content.status] ?? "gray"}
-                variant="light"
-              >
-                {resolved.content.status}
-              </Badge>
-              <Badge
-                color={collectorBadgeColor(resolved.content.collector)}
-                variant={resolved.content.collector ? "filled" : "light"}
-              >
-                {collectorLabel(resolved.content.collector)}
-              </Badge>
-              <Text size="sm" c="dimmed">
-                {resolved.content.templateKey} · v{resolved.content.version} ·{" "}
-                {resolved.content.action}/{resolved.content.actionType}
-              </Text>
-            </Group>
-          ) : null}
-
-          {resolvedFailure ? (
-            <Alert
-              color="red"
-              title={`No se pudo renderizar — ${resolvedFailure.kind}`}
-            >
-              <Stack gap={4}>
-                <Text size="sm" ff="monospace">
-                  {resolvedFailure.line != null
-                    ? `línea ${resolvedFailure.line}: `
-                    : ""}
-                  {resolvedFailure.message}
-                </Text>
-                <Text size="xs" c="dimmed">
-                  Esta es la versión a la que resuelve el envío. Si no puede
-                  renderizarse aquí, está fallando al enviarse.
-                </Text>
-              </Stack>
-            </Alert>
-          ) : null}
-
-          {/*
-            THE ENGINE, NOT THE TEMPLATE, AND NOT THE SERVER.
-
-            Scoped to the rendered-mail area on purpose: the resolution above it
-            is a complete, correct answer that the API already gave, and the
-            badges and banners are still saying what the send path would do. The
-            only thing missing is the picture of the mail, so that is the only
-            thing this reports.
-
-            Red, but worded away from the template. A version that cannot render
-            because of its own Jinja arrives as `resolvedFailure` above, with a
-            line number; this one means Pyodide never booted or the worker died,
-            and sending the reader to look for the fault in perfectly good HTML
-            would cost them an afternoon.
-          */}
-          {resolvedEngineError ? (
-            <Alert color="red" title="No se pudo arrancar el motor de vista previa">
-              <Stack gap={4}>
-                <Text size="sm">
-                  La resolución de arriba es correcta: el servidor respondió y
-                  esa es la versión que se envía. Lo que falló es el motor que
-                  renderiza el mail en este navegador, así que no se puede
-                  mostrar cómo se ve.
-                </Text>
-                <Text size="xs" c="dimmed" ff="monospace">
-                  {resolvedEngineError}
-                </Text>
-                <Text size="xs" c="dimmed">
-                  No es un problema de la plantilla. Recarga la página para
-                  volver a arrancar el motor.
-                </Text>
-              </Stack>
-            </Alert>
-          ) : null}
-
-          {resolvedRender ? (
-            <RenderedEmail
-              subject={resolvedRender.subject}
-              html={resolvedRender.html}
-              height={520}
+          {resolved && resolved.answers.length === 1 ? (
+            <ResolutionAnswer
+              result={resolved.answers[0].result}
+              error={resolved.answers[0].error}
             />
           ) : null}
+
+          {resolved && resolved.answers.length > 1
+            ? resolved.answers.map((answer) => (
+                <Paper
+                  key={`${answer.spelling.action} ${answer.spelling.actionType}`}
+                  withBorder
+                  p="sm"
+                >
+                  <Stack gap="sm">
+                    <Text size="sm" fw={500}>
+                      Pedida como <Code>{answer.spelling.action}</Code> /{" "}
+                      <Code>{answer.spelling.actionType}</Code>
+                    </Text>
+                    <ResolutionAnswer result={answer.result} error={answer.error} />
+                  </Stack>
+                </Paper>
+              ))
+            : null}
 
           {cascadeAnswered && !resolved && !resolveError && !resolve.isPending ? (
             <Text size="sm" c="dimmed">

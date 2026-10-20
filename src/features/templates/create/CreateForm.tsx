@@ -32,6 +32,14 @@ interface CreateFormProps {
    * what it SAYS can still change.
    */
   mode?: "create" | "edit";
+  /**
+   * Notes under Action / Action type about the spelling actually sent (see
+   * `spellingHints`). Null or absent renders nothing.
+   */
+  actionHint?: string | null;
+  actionTypeHint?: string | null;
+  /** When set, the submit button is disabled and this text says why. */
+  submitBlockedReason?: string | null;
   values: CreateFormValues;
   fieldErrors: CreateFormFieldErrors;
   generalErrors: string[];
@@ -68,6 +76,9 @@ interface CreateFormProps {
 // from the CreatePage container.
 export function CreateForm({
   mode = "create",
+  actionHint = null,
+  actionTypeHint = null,
+  submitBlockedReason = null,
   values,
   fieldErrors,
   generalErrors,
@@ -224,10 +235,15 @@ export function CreateForm({
         {/* Locked in edit mode: these identify the version, and the API takes no
             such fields on an update. Rendering them editable would let someone
             change what looks like the target and then watch the save ignore it. */}
+        {/* The spelling notes sit UNDER the input: they are a consequence of
+            what was typed, and reading them before the field would be reading
+            the answer before the question. */}
         <TextInput
           label="Action"
           placeholder="ORDER"
           required
+          description={actionHint}
+          inputWrapperOrder={["label", "input", "description", "error"]}
           disabled={isEdit}
           value={values.action}
           onChange={(event) => onFieldChange("action", event.currentTarget.value)}
@@ -238,6 +254,8 @@ export function CreateForm({
           label="Action type"
           placeholder="CREATED"
           required
+          description={actionTypeHint}
+          inputWrapperOrder={["label", "input", "description", "error"]}
           disabled={isEdit}
           value={values.actionType}
           onChange={(event) =>
@@ -367,8 +385,17 @@ export function CreateForm({
           no la ve hasta que la publiques desde el listado de plantillas.
         </Alert>
 
-        <Group justify="flex-end" mt="sm">
-          <Button type="submit" loading={isSubmitting} disabled={isSubmitting}>
+        <Group justify="flex-end" mt="sm" gap="sm">
+          {submitBlockedReason ? (
+            <Text size="sm" c="dimmed">
+              {submitBlockedReason}
+            </Text>
+          ) : null}
+          <Button
+            type="submit"
+            loading={isSubmitting}
+            disabled={isSubmitting || submitBlockedReason !== null}
+          >
             {isEdit ? "Guardar cambios" : "Guardar borrador"}
           </Button>
         </Group>

@@ -6,8 +6,10 @@
 // waits for a button. This describes the CHOICES available for a pair the reader
 // has already named, so it has to be on screen before anything is clicked —
 // there is nothing to press if the dropdown is empty.
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import { templatesApi } from "../api/templatesClient";
+import type { ActionSpelling } from "../lib/actionNames";
+import type { InventoryAnswer } from "../features/templates/browse/browse.logic";
 import { templateKeys } from "./queryKeys";
 
 export function useCollectorsInventory(
@@ -77,4 +79,34 @@ export function useCollectorsInventory(
     */
     retry: false,
   });
+}
+
+/**
+ * The same question asked once per stored spelling of the pair.
+ *
+ * /collectors matches action/actionType EXACTLY as stored, so a pair the
+ * catalogue writes as both PAYMENT and payment has two inventories, and asking
+ * in one spelling silently drops the collectors stored in the other. The caller
+ * passes the bounded, capped spelling list and merges the answers
+ * (`mergeInventoryAnswers`). One spelling is one query — the old single call.
+ *
+ * Every option here — no staleTime, refetch on focus, a single attempt — is the
+ * single hook's, for the reasons documented on it above.
+ */
+export function useCollectorsInventories(spellings: ActionSpelling[]): InventoryAnswer[] {
+  const results = useQueries({
+    queries: spellings.map((spelling) => ({
+      queryKey: templateKeys.collectorsInventory(spelling.action, spelling.actionType),
+      queryFn: () =>
+        templatesApi.collectorsInventory(spelling.action, spelling.actionType, {}),
+      enabled: spelling.action.trim() !== "" && spelling.actionType.trim() !== "",
+      refetchOnWindowFocus: true,
+      retry: false,
+    })),
+  });
+  return results.map((result) => ({
+    data: result.data ?? null,
+    isLoading: result.isLoading,
+    isError: result.isError,
+  }));
 }

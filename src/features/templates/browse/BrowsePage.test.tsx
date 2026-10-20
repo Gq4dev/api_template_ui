@@ -4,7 +4,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MantineProvider } from "@mantine/core";
 import { MemoryRouter } from "react-router-dom";
-import type { TemplateSummary } from "../../../api/types";
+import type {
+  CollectorsInventoryResponse,
+  TemplateContentResponse,
+  TemplateSummary,
+} from "../../../api/types";
 import { BrowsePage } from "./BrowsePage";
 import { WITHOUT_OWN_VARIANT, WITH_OWN_VARIANT } from "./browse.logic";
 
@@ -22,6 +26,7 @@ vi.mock("../../../api/templatesClient", async (importOriginal) => {
       ...actual.templatesApi,
       list: vi.fn(),
       collectorsInventory: vi.fn(),
+      resolveByAction: vi.fn(),
     },
   };
 });
@@ -44,10 +49,11 @@ function row(
   action: string,
   actionType: string,
   collector: string | null,
+  version = 1,
 ): TemplateSummary {
   return {
     templateKey,
-    version: 1,
+    version,
     status: "ACTIVE",
     action,
     actionType,
@@ -62,17 +68,18 @@ function row(
 
 const ROWS = [
   row("payment_approved", "payment", "approved", null),
-  row("payment_approved__bbva", "payment", "approved", "bbva"),
+  // v2, so a switch to another collector visibly lands on a different version.
+  row("payment_approved__bbva", "payment", "approved", "bbva", 2),
   row("payment_pending", "payment", "pending", null),
   row("withdrawal_create__santander", "withdrawal", "create", "santander"),
 ];
 
-function renderBrowse(): User {
+function renderBrowse(rows: TemplateSummary[] = ROWS): User {
   vi.mocked(templatesApi.list).mockResolvedValue({
-    content: ROWS,
+    content: rows,
     page: 0,
     size: 500,
-    totalElements: ROWS.length,
+    totalElements: rows.length,
     totalPages: 1,
   });
   // The inventory endpoint is not deployed; the page falls back to the catalogue.
@@ -196,7 +203,7 @@ describe("BrowsePage — collector-first order", () => {
       actionType: "approved",
       collector: "bbva",
       fromKey: "payment_approved__bbva",
-      fromVersion: "1",
+      fromVersion: "2",
     });
   });
 
@@ -239,5 +246,192 @@ describe("BrowsePage — collector-first order", () => {
     expect(field(/^collector$/i)).toHaveValue("");
     expect(field(/^action$/i)).toHaveValue("");
     expect(field(/^action$/i)).toBeDisabled();
+  });
+
+  // Changing the collector keeps the pair (every action is offered under every
+  // collector) but never the version, which belonged to the previous key.
+  it("clears the version on a collector change, landing on the new collector's template or none", async () => {
+    const user = renderBrowse();
+    await switchToCollectorFirst(user);
+    await pick(user, /^collector$/i, "bbva");
+    await pick(user, /^action$/i, "payment");
+    await pick(user, /^action type$/i, "approved");
+    expect(await screen.findByText("payment_approved__bbva")).toBeInTheDocument();
+    expect(field(/^version$/i)).toHaveValue("v2 · ACTIVE");
+
+    // santander has nothing under payment/approved.
+    await pick(user, /^collector$/i, "santander");
+    expect(
+      await screen.findByText(/no hay ninguna plantilla guardada para “santander”/i),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("payment_approved__bbva")).not.toBeInTheDocument();
+    expect(field(/^version$/i)).toHaveValue("");
+
+    // The generic does: its own key, at its own default version.
+    await pick(user, /^collector$/i, "Genérica");
+    expect(await screen.findByText("payment_approved")).toBeInTheDocument();
+    expect(field(/^version$/i)).toHaveValue("v1 · ACTIVE");
+  });
+});
+
+describe("BrowsePage — a pair written more than one way", () => {
+  // The live shape: generic and bbva as PAYMENT/APPROVED, dell as payment/approved.
+  const DRIFTED = [
+    row("payment_approved", "PAYMENT", "APPROVED", null),
+    row("payment_approved__bbva", "PAYMENT", "APPROVED", "bbva"),
+    row("payment_approved__dell", "payment", "approved", "dell"),
+  ];
+
+  function content(overrides: Partial<TemplateContentResponse>): TemplateContentResponse {
+    return {
+      templateKey: "payment_approved",
+      version: 1,
+      status: "ACTIVE",
+      action: "PAYMENT",
+      actionType: "APPROVED",
+      collector: null,
+      subject: null,
+      variables: [],
+      html: "<p>x</p>",
+      effectiveFrom: null,
+      effectiveTo: null,
+      fallbackToGeneric: false,
+      ...overrides,
+    };
+  }
+
+  async function waitForCollectorList() {
+    await waitFor(() => expect(field(/^collector$/i)).not.toBeDisabled());
+  }
+
+  it("offers one marked action and asks the send path once per stored spelling", async () => {
+    // What the live API does: PAYMENT for dell falls back, payment finds dell.
+    vi.mocked(templatesApi.resolveByAction).mockImplementation(async (action: string) =>
+      action === "PAYMENT"
+        ? content({ collector: null, fallbackToGeneric: true })
+        : content({
+            templateKey: "payment_approved__dell",
+            action: "payment",
+            actionType: "approved",
+            collector: "dell",
+          }),
+    );
+    const user = renderBrowse(DRIFTED);
+    await waitForCatalogue();
+
+    const actions = await openList(user, /^action$/i);
+    expect(within(actions).getAllByRole("option").map((option) => option.textContent)).toEqual([
+      "payment (3) · 2 formas de escritura",
+    ]);
+    await user.click(within(actions).getAllByRole("option")[0]);
+    // The sole action type is picked for the reader, as always.
+    await waitFor(() =>
+      expect(field(/^action type$/i)).toHaveValue("approved (3) · 2 formas de escritura"),
+    );
+    await waitForCollectorList();
+    await pick(user, /^collector$/i, "dell");
+
+    // The catalogue panel finds dell's variant despite its spelling.
+    expect(await screen.findByText("payment_approved__dell")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /qué se envía ahora/i }));
+
+    expect(
+      await screen.findByText(/está escrita de más de una forma en el catálogo/i),
+    ).toBeInTheDocument();
+    expect(templatesApi.resolveByAction).toHaveBeenCalledTimes(2);
+    expect(templatesApi.resolveByAction).toHaveBeenCalledWith("PAYMENT", "APPROVED", {
+      collector: "dell",
+    });
+    expect(templatesApi.resolveByAction).toHaveBeenCalledWith("payment", "approved", {
+      collector: "dell",
+    });
+    expect(screen.getAllByText(/pedida como/i)).toHaveLength(2);
+    expect(
+      screen.getByText(/no hay plantilla vigente para “dell” — se muestra la genérica/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("dell tiene su propia versión")).toBeInTheDocument();
+  });
+
+  // The browser finding: asked only as PAYMENT, /collectors left dell out.
+  it("merges the collector inventory across stored spellings", async () => {
+    const answers: Record<string, CollectorsInventoryResponse> = {
+      PAYMENT: {
+        action: "PAYMENT",
+        actionType: "APPROVED",
+        at: "2026-09-15T10:05:00Z",
+        generic: { templateKey: "payment_approved", version: 3, status: "ACTIVE", servable: true },
+        collectors: [
+          { collector: "bbva", templateKey: "payment_approved__bbva", version: 1, status: "ACTIVE", servable: true },
+        ],
+      } as CollectorsInventoryResponse,
+      payment: {
+        action: "payment",
+        actionType: "approved",
+        at: "2026-09-15T10:00:00Z",
+        generic: null,
+        collectors: [
+          { collector: "bbva", templateKey: "payment_approved__bbva", version: 1, status: "DRAFT", servable: false },
+          { collector: "dell", templateKey: "payment_approved__dell", version: 10, status: "ACTIVE", servable: true },
+        ],
+      } as CollectorsInventoryResponse,
+    };
+    const user = renderBrowse(DRIFTED);
+    vi.mocked(templatesApi.collectorsInventory).mockImplementation(
+      async (action: string) => answers[action],
+    );
+    await waitForCatalogue();
+    await pick(user, /^action$/i, "payment (3) · 2 formas de escritura");
+    await waitForCollectorList();
+
+    expect(templatesApi.collectorsInventory).toHaveBeenCalledWith(
+      "PAYMENT",
+      "APPROVED",
+      expect.anything(),
+    );
+    expect(templatesApi.collectorsInventory).toHaveBeenCalledWith(
+      "payment",
+      "approved",
+      expect.anything(),
+    );
+    expect(
+      await screen.findByText(/2 collectors con variante propia, reunidos de 2 formas de escritura/),
+    ).toBeInTheDocument();
+
+    const listbox = await openList(user, /^collector$/i);
+    const texts = within(listbox)
+      .getAllByRole("option")
+      .map((option) => option.textContent ?? "");
+    const dell = texts.find((text) => text.startsWith("dell"));
+    const bbva = texts.find((text) => text.startsWith("bbva"));
+    expect(dell).toContain("v10");
+    expect(dell).not.toContain("según escritura");
+    expect(bbva).toContain("según escritura");
+  });
+
+  it("makes exactly one call, with no warning, for a pair written one way", async () => {
+    vi.mocked(templatesApi.resolveByAction).mockResolvedValue(
+      content({
+        templateKey: "payment_approved__bbva",
+        action: "payment",
+        actionType: "approved",
+        collector: "bbva",
+      }),
+    );
+    const user = renderBrowse();
+    await waitForCatalogue();
+    await pick(user, /^action$/i, "payment (3)");
+    await pick(user, /^action type$/i, "approved (2)");
+    await waitForCollectorList();
+    await pick(user, /^collector$/i, "bbva");
+
+    await user.click(screen.getByRole("button", { name: /qué se envía ahora/i }));
+
+    expect(await screen.findByText("bbva tiene su propia versión")).toBeInTheDocument();
+    expect(templatesApi.resolveByAction).toHaveBeenCalledTimes(1);
+    expect(templatesApi.resolveByAction).toHaveBeenCalledWith("payment", "approved", {
+      collector: "bbva",
+    });
+    expect(screen.queryByText(/más de una forma/i)).not.toBeInTheDocument();
   });
 });

@@ -7,6 +7,9 @@ export const templateKeys = {
   all: ["templates"] as const,
   list: (params: ListTemplatesParams) =>
     [...templateKeys.all, "list", params] as const,
+  // Every page of the catalogue, merged — a different shape from one page, so a
+  // different key. Under `all`, so every write invalidates it with the rest.
+  fullCatalogue: () => [...templateKeys.all, "fullCatalogue"] as const,
   resolve: (templateKey: string, at?: string) =>
     [...templateKeys.all, "resolve", templateKey, at ?? "now"] as const,
   // Every collector's answer for one action pair. The instant IS part of the

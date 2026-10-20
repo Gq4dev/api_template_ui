@@ -25,17 +25,48 @@ vi.mock("../../../api/templatesClient", async (importOriginal) => {
     templatesApi: {
       ...actual.templatesApi,
       create: vi.fn(),
+      // The stored catalogue gates and shapes the submit; see renderCreatePage.
+      list: vi.fn(),
     },
   };
 });
 
 async function renderCreatePage() {
+  // A catalogue holding the ORDER/CREATED generic in the spelling these tests
+  // type, so the spelling rule sends exactly what is typed. The submit stays
+  // disabled until the catalogue has loaded, hence the wait.
+  const { templatesApi } = await import("../../../api/templatesClient");
+  vi.mocked(templatesApi.list).mockResolvedValue({
+    content: [
+      {
+        templateKey: "order_created",
+        version: 1,
+        status: "ACTIVE",
+        action: "ORDER",
+        actionType: "CREATED",
+        collector: null,
+        subject: null,
+        effectiveFrom: null,
+        effectiveTo: null,
+        createdBy: "seed",
+        createdAt: "2026-01-01T00:00:00Z",
+      },
+    ],
+    page: 0,
+    size: 500,
+    totalElements: 1,
+    totalPages: 1,
+  });
+
   const user = userEvent.setup();
   render(
     <AppProviders>
       <CreatePage />
     </AppProviders>,
   );
+  await waitFor(() => {
+    expect(screen.getByRole("button", { name: /guardar borrador/i })).toBeEnabled();
+  });
   return user;
 }
 

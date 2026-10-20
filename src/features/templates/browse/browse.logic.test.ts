@@ -16,6 +16,11 @@ import {
   collectorFirstCollectorData,
   selectDataValues,
   switchBrowseMode,
+  resolveSpellings,
+  spellingSuffix,
+  capSpellings,
+  mergeInventoryAnswers,
+  MAX_QUERIED_SPELLINGS,
   actionOptions,
   actionTypeOptions,
   catalogueCollectorData,
@@ -1038,5 +1043,257 @@ describe("collector-first order", () => {
         ).toEqual(EMPTY_BROWSE_SELECTION);
       });
     });
+  });
+});
+
+// The explicit generic is an ANSWER in the collector-first order (picked, blank),
+// so a full generic triple must survive the trip back like any other.
+describe("switchBrowseMode — explicit generic", () => {
+  it("keeps a collector-first generic triple, version included, going template-first", () => {
+    const generic = {
+      action: "payment",
+      actionType: "approved",
+      collector: "",
+      collectorPicked: true,
+      version: 2,
+    };
+    expect(switchBrowseMode(generic, "TEMPLATE_FIRST", ["", "bbva"])).toEqual({
+      ...generic,
+      collectorPicked: false,
+    });
+  });
+});
+
+/*
+  The live catalogue, reduced: the generic and bbva stored as PAYMENT/APPROVED,
+  dell as payment/approved. The backend identifies all three canonically (one
+  `payment_approved` family) but stores and matches the raw spelling.
+*/
+describe("canonical action names", () => {
+  const drifted = groupByTemplateKey([
+    row("payment_approved", 3, "ACTIVE", "PAYMENT", "APPROVED"),
+    row("payment_approved__bbva", 1, "ACTIVE", "PAYMENT", "APPROVED", "bbva"),
+    row("payment_approved__dell", 1, "ACTIVE", "payment", "approved", "dell"),
+    row("payment_rejected", 1, "ACTIVE", "PAYMENT", "REJECTED"),
+  ]);
+
+  it("says nothing about a single spelling and counts several", () => {
+    expect(spellingSuffix(1)).toBe("");
+    expect(spellingSuffix(3)).toBe(" · 3 formas de escritura");
+  });
+
+  // Two options used to split one template's variants across two branches.
+  it("offers PAYMENT and payment as ONE action, marked as written two ways", () => {
+    expect(actionOptions(drifted)).toEqual([
+      { value: "payment", label: "payment (4) · 2 formas de escritura" },
+    ]);
+  });
+
+  it("keeps a consistently written name in the spelling it is stored in", () => {
+    expect(
+      actionOptions(groupByTemplateKey([row("payment_approved", 1, "ACTIVE", "PAYMENT", "APPROVED")])),
+    ).toEqual([{ value: "payment", label: "PAYMENT (1)" }]);
+  });
+
+  it("narrows action types canonically, marking only the drifted one", () => {
+    expect(actionTypeOptions(drifted, "payment")).toEqual([
+      { value: "approved", label: "approved (3) · 2 formas de escritura" },
+      { value: "rejected", label: "REJECTED (1)" },
+    ]);
+    expect(actionTypeOptions(drifted, "PAYMENT")).toEqual(actionTypeOptions(drifted, "payment"));
+  });
+
+  it("finds every template of the canonical pair, whatever its stored spelling", () => {
+    expect(findGroup(drifted, "payment", "approved", "dell")?.templateKey).toBe(
+      "payment_approved__dell",
+    );
+    expect(findGroup(drifted, "payment", "approved", "bbva")?.templateKey).toBe(
+      "payment_approved__bbva",
+    );
+    expect(findGroup(drifted, "payment", "approved", "")?.templateKey).toBe("payment_approved");
+  });
+
+  it("counts a variant stored in another spelling as stored HERE", () => {
+    expect(catalogueCollectorGroups(drifted, "payment", "approved")).toEqual([
+      { group: COLLECTORS_STORED_HERE, items: ["bbva", "dell"] },
+    ]);
+  });
+
+  it("marks collector-first options canonically", () => {
+    expect(collectorFirstActionData(drifted, "dell")).toEqual([
+      {
+        group: WITH_OWN_VARIANT,
+        items: [{ value: "payment", label: "payment · 2 formas de escritura" }],
+      },
+    ]);
+    expect(collectorFirstActionTypeData(drifted, "dell", "payment")).toEqual([
+      {
+        group: WITH_OWN_VARIANT,
+        items: [{ value: "approved", label: "approved · 2 formas de escritura" }],
+      },
+      { group: WITHOUT_OWN_VARIANT, items: [{ value: "rejected", label: "REJECTED" }] },
+    ]);
+  });
+
+  // An answer asked in the stored PAYMENT spelling answers the canonical selection.
+  it("matches a resolution asked in a stored spelling against the canonical selection", () => {
+    const current = { action: "payment", actionType: "approved", collector: "dell" };
+    expect(
+      resolutionMatchesSelection({ ...current, action: "PAYMENT", actionType: "APPROVED" }, current),
+    ).toBe(true);
+    expect(
+      resolutionMatchesSelection({ ...current, action: "PAYMENT", actionType: "REJECTED" }, current),
+    ).toBe(false);
+  });
+
+  describe("resolveSpellings", () => {
+    it("returns every stored spelling of the pair, most common first", () => {
+      expect(resolveSpellings(drifted, "payment", "approved")).toEqual([
+        { action: "PAYMENT", actionType: "APPROVED" },
+        { action: "payment", actionType: "approved" },
+      ]);
+    });
+
+    it("is a single call for a pair written one way", () => {
+      expect(resolveSpellings(drifted, "payment", "rejected")).toEqual([
+        { action: "PAYMENT", actionType: "REJECTED" },
+      ]);
+    });
+
+    it("asks in the pair itself when nothing is stored, and not at all while unanswered", () => {
+      expect(resolveSpellings(drifted, "refund", "done")).toEqual([
+        { action: "refund", actionType: "done" },
+      ]);
+      expect(resolveSpellings(drifted, "payment", "")).toEqual([]);
+    });
+  });
+});
+
+describe("capSpellings", () => {
+  const spellings = Array.from({ length: 7 }, (_, i) => ({
+    action: `payment${"_".repeat(i)}`,
+    actionType: "approved",
+  }));
+
+  it("queries at most MAX_QUERIED_SPELLINGS, keeping the most common first", () => {
+    const { queried, omitted } = capSpellings(spellings);
+    expect(MAX_QUERIED_SPELLINGS).toBe(5);
+    expect(queried).toEqual(spellings.slice(0, 5));
+    expect(omitted).toBe(2);
+  });
+
+  it("omits nothing at or under the cap", () => {
+    expect(capSpellings(spellings.slice(0, 5))).toEqual({
+      queried: spellings.slice(0, 5),
+      omitted: 0,
+    });
+    expect(capSpellings(spellings.slice(0, 2), 5).omitted).toBe(0);
+  });
+});
+
+describe("mergeInventoryAnswers", () => {
+  const entry = (collector: string, version: number, servable: boolean) => ({
+    collector,
+    templateKey: `payment_approved__${collector}`,
+    version,
+    status: (servable ? "ACTIVE" : "DRAFT") as TemplateSummary["status"],
+    servable,
+  });
+  const GENERIC = {
+    templateKey: "payment_approved",
+    version: 3,
+    status: "ACTIVE" as const,
+    servable: true,
+  };
+  const answer = (
+    at: string,
+    collectors: ReturnType<typeof entry>[],
+    generic: typeof GENERIC | null = GENERIC,
+  ) => ({
+    data: {
+      action: "PAYMENT",
+      actionType: "APPROVED",
+      at,
+      collectors,
+      generic,
+    } as CollectorsInventoryResponse,
+    isLoading: false,
+    isError: false,
+  });
+
+  it("passes a single spelling's answer through untouched", () => {
+    const only = answer("2026-09-15T10:00:00Z", [entry("bbva", 1, true)]);
+    const merged = mergeInventoryAnswers([only]);
+    expect(merged.inventory).toBe(only.data);
+    expect(merged.divergentCollectors.size).toBe(0);
+  });
+
+  // The live finding: dell is only in the payment/approved answer.
+  it("counts every collector once across spellings, sorted by name", () => {
+    const merged = mergeInventoryAnswers([
+      answer("2026-09-15T10:05:00Z", [entry("ibm", 1, true), entry("bbva", 1, true)]),
+      answer("2026-09-15T10:05:00Z", [entry("dell", 10, true), entry("BBVA", 1, true)]),
+    ]);
+    expect(merged.inventory?.collectors.map((c) => c.collector)).toEqual(["bbva", "dell", "ibm"]);
+    expect(merged.divergentCollectors.size).toBe(0);
+  });
+
+  it("flags a collector whose servable or version differs by spelling", () => {
+    const merged = mergeInventoryAnswers([
+      answer("2026-09-15T10:05:00Z", [entry("bbva", 1, true), entry("ibm", 2, true)]),
+      answer("2026-09-15T10:05:00Z", [entry("bbva", 1, false), entry("ibm", 3, true)]),
+    ]);
+    expect([...merged.divergentCollectors].sort()).toEqual(["bbva", "ibm"]);
+    // The first (most common) spelling's entry is the one kept.
+    expect(merged.inventory?.collectors.find((c) => c.collector === "bbva")?.servable).toBe(true);
+  });
+
+  it("dates the merge by the OLDEST answer", () => {
+    const merged = mergeInventoryAnswers([
+      answer("2026-09-15T10:05:00Z", []),
+      answer("2026-09-15T09:58:00Z", []),
+    ]);
+    expect(merged.inventory?.at).toBe("2026-09-15T09:58:00Z");
+  });
+
+  it("marks the merge as errored when any spelling failed, keeping what arrived", () => {
+    const merged = mergeInventoryAnswers([
+      answer("2026-09-15T10:05:00Z", [entry("bbva", 1, true)]),
+      { data: null, isLoading: false, isError: true },
+    ]);
+    expect(merged.isError).toBe(true);
+    expect(merged.inventory?.collectors).toHaveLength(1);
+  });
+
+  it("shows nothing while any spelling is still on its first load", () => {
+    const merged = mergeInventoryAnswers([
+      answer("2026-09-15T10:05:00Z", [entry("bbva", 1, true)]),
+      { data: null, isLoading: true, isError: false },
+    ]);
+    expect(merged).toMatchObject({ inventory: null, isLoading: true });
+  });
+
+  it("has no inventory when every spelling failed", () => {
+    expect(
+      mergeInventoryAnswers([
+        { data: null, isLoading: false, isError: true },
+        { data: null, isLoading: false, isError: true },
+      ]),
+    ).toMatchObject({ inventory: null, isError: true });
+  });
+
+  it("takes the first generic present and flags disagreement about it", () => {
+    const merged = mergeInventoryAnswers([
+      answer("2026-09-15T10:05:00Z", [], null),
+      answer("2026-09-15T10:05:00Z", [], GENERIC),
+    ]);
+    expect(merged.inventory?.generic).toEqual(GENERIC);
+    expect(merged.genericDivergent).toBe(true);
+
+    const agreeing = mergeInventoryAnswers([
+      answer("2026-09-15T10:05:00Z", []),
+      answer("2026-09-15T10:05:00Z", []),
+    ]);
+    expect(agreeing.genericDivergent).toBe(false);
   });
 });

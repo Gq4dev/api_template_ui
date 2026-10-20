@@ -6,6 +6,11 @@ import { useCreateTemplate } from "../../../queries/useCreateTemplate";
 import { useVariableCatalogue } from "../../../queries/useVariableCatalogue";
 import { useJinjaPreview } from "../../../queries/useJinjaPreview";
 import { useVersionContent } from "../../../queries/useVersionContent";
+import {
+  CATALOGUE_PAGE_SIZE,
+  MAX_CATALOGUE_PAGES,
+  useFullCatalogue,
+} from "../../../queries/fullCatalogue";
 import { IdempotencyKeyManager } from "../../../lib/idempotency";
 import { toUiError } from "../../../lib/errors";
 import { collectorLabel } from "../../../lib/collector";
@@ -22,8 +27,11 @@ import {
   initialFormValues,
   isPublishedStatus,
   mapValidationDetails,
+  pairSpellings,
   seedFromVersion,
   sourceAddressFromParams,
+  spellingFor,
+  spellingHints,
   validateCreateForm,
   type CreateFormFieldErrors,
   type CreateFormValues,
@@ -128,6 +136,31 @@ export function CreatePage() {
   // success (see IdempotencyKeyManager docs).
   const idempotencyManager = useRef(new IdempotencyKeyManager());
   const mutation = useCreateTemplate();
+
+  // --- Spelling sent --------------------------------------------------------
+  // The stored catalogue decides how action/actionType are SPELLED on the wire,
+  // so a save neither 400s on an existing key nor adds a new spelling of a
+  // template; see `spellingFor`. Same query as the browse page, so both share
+  // one cache entry. The "create from version" flow needs nothing extra: its
+  // seeded source spelling is the existing key's, which rule 1 returns as-is.
+  //
+  // The rule is never skipped SILENTLY. While the catalogue is on its first
+  // load the submit is blocked (a click that beat the fetch would send the typed
+  // spelling and could 400 or add drift). If it cannot be read, the author is
+  // told the typed spelling will go out unchecked and may still save — the
+  // backend's identity guard remains the last line of defence. A truncated
+  // catalogue is used, and flagged.
+  const storedCatalogueQuery = useFullCatalogue();
+  const catalogueRows = storedCatalogueQuery.data?.content ?? null;
+  const catalogueLoading = !storedCatalogueQuery.data && !storedCatalogueQuery.isError;
+  const catalogueFailed = !storedCatalogueQuery.data && storedCatalogueQuery.isError;
+  const catalogueTruncated = storedCatalogueQuery.data?.truncated ?? false;
+  const sentSpelling = spellingFor(values, catalogueRows);
+  const spellingNotes = spellingHints(
+    values,
+    sentSpelling,
+    pairSpellings(values, catalogueRows),
+  );
 
   // --- Authoring aids -----------------------------------------------------
   const [previewVariant, setPreviewVariant] = useState<PreviewVariant>("single");
@@ -241,10 +274,17 @@ export function CreatePage() {
     setNetworkErrorMessage(null);
 
     if (Object.keys(errors).length > 0) return;
+    // The button is disabled meanwhile; this also covers Enter in a field.
+    if (catalogueLoading) return;
 
     mutation.mutate(
       {
-        payload: buildCreatePayload(values),
+        // Validated as typed, sent as spelled: see `spellingFor`.
+        payload: buildCreatePayload({
+          ...values,
+          action: sentSpelling.action,
+          actionType: sentSpelling.actionType,
+        }),
         opts: {
           author: authorEmail.trim() || undefined,
           idempotencyKey: idempotencyManager.current.current(),
@@ -359,6 +399,21 @@ export function CreatePage() {
   return (
     <>
       {header}
+      {catalogueFailed ? (
+        <Alert color="yellow" title="No se pudo leer el catálogo" mb="md">
+          No se pudo leer el catálogo: se enviará Action/Action type tal como los
+          escribiste, sin comprobar cómo están guardados.
+        </Alert>
+      ) : null}
+      {catalogueTruncated && storedCatalogueQuery.data ? (
+        <Alert color="yellow" title="No se leyó el catálogo completo" mb="md">
+          Se leyeron {storedCatalogueQuery.data.content.length} de{" "}
+          {storedCatalogueQuery.data.totalElements} versiones (se leen como máximo{" "}
+          {MAX_CATALOGUE_PAGES * CATALOGUE_PAGE_SIZE}). La forma de escritura que
+          se envía se eligió con un catálogo incompleto y puede no coincidir con
+          la guardada.
+        </Alert>
+      ) : null}
       {source ? (
         <SourceVersionNotice
           source={source}
@@ -379,6 +434,9 @@ export function CreatePage() {
         </Stack>
       ) : (
         <CreateForm
+          submitBlockedReason={catalogueLoading ? "Comprobando el catálogo…" : null}
+          actionHint={spellingNotes.action}
+          actionTypeHint={spellingNotes.actionType}
           values={values}
           fieldErrors={fieldErrors}
           generalErrors={generalErrors}

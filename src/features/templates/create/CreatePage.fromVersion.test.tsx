@@ -26,6 +26,7 @@ vi.mock("../../../api/templatesClient", async (importOriginal) => {
       ...actual.templatesApi,
       getVersion: vi.fn(),
       create: vi.fn(),
+      list: vi.fn(),
     },
   };
 });
@@ -74,6 +75,29 @@ function LocationProbe() {
 }
 
 function renderFromSource(source: TemplateContentResponse = SOURCE) {
+  // The stored catalogue decides the spelling sent (see `spellingFor`). Here it
+  // holds the source itself, as it would live.
+  vi.mocked(templatesApi.list).mockResolvedValue({
+    content: [
+      {
+        templateKey: source.templateKey,
+        version: source.version,
+        status: source.status,
+        action: source.action ?? "",
+        actionType: source.actionType ?? "",
+        collector: source.collector,
+        subject: source.subject,
+        effectiveFrom: source.effectiveFrom,
+        effectiveTo: source.effectiveTo,
+        createdBy: "seed",
+        createdAt: "2026-01-01T00:00:00Z",
+      },
+    ],
+    page: 0,
+    size: 500,
+    totalElements: 1,
+    totalPages: 1,
+  });
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });

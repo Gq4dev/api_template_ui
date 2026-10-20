@@ -11,7 +11,13 @@ import type {
 import {
   COLLECTOR_FORMAT_MESSAGE,
   isValidCollector,
+  normalizeCollector,
 } from "../../../lib/collector";
+import {
+  canonicalActionName,
+  storedSpellings,
+  type ActionSpelling,
+} from "../../../lib/actionNames";
 
 // No date field. Creating a template does not schedule it — it produces a DRAFT,
 // and WHEN it applies is decided later, at publish time, by whoever decides to
@@ -159,20 +165,20 @@ export function seedFromVersion(
 
 type Identity = Pick<CreateFormValues, "action" | "actionType" | "collector">;
 
-function normalizeIdentityPart(value: string): string {
-  return value.trim().toLowerCase();
-}
-
 /**
- * Whether the form still names the same template as the source. Compared
- * trimmed and case-insensitively, like the key the server derives from them:
- * "ORDER" and "order " are one template, not two.
+ * Whether the form still names the same template as the source.
+ *
+ * Compared the way the server decides identity: action and action type through
+ * `canonicalActionName` — "ORDER", "order " and "order.created"-style spellings
+ * derive one key — and the collector trimmed and lowercased. Comparing raw
+ * would announce "new template" to an author who only changed the case, while
+ * the server would file the save as the next version of the same key.
  */
 export function identityMatchesSource(values: Identity, source: Identity): boolean {
   return (
-    normalizeIdentityPart(values.action) === normalizeIdentityPart(source.action) &&
-    normalizeIdentityPart(values.actionType) === normalizeIdentityPart(source.actionType) &&
-    normalizeIdentityPart(values.collector) === normalizeIdentityPart(source.collector)
+    canonicalActionName(values.action) === canonicalActionName(source.action) &&
+    canonicalActionName(values.actionType) === canonicalActionName(source.actionType) &&
+    normalizeCollector(values.collector) === normalizeCollector(source.collector)
   );
 }
 
@@ -414,4 +420,180 @@ export function buildStarterTemplate(variables: string[]): string {
     "{% endblock %}",
     "",
   ].join("\n");
+}
+
+// --- Spelling sent to the API -----------------------------------------------
+//
+// THE PROBLEM THIS EXISTS FOR. api-template canonicalizes only the collector.
+// action/actionType are stored exactly as sent and matched exactly by /resolve
+// and /collectors; only the templateKey is derived from their canonical form
+// (see `canonicalActionName`). Verified against the live API (2026-09-15): the
+// generic `payment_approved` and most variants are stored as PAYMENT/APPROVED,
+// `payment_approved__dell` as payment/approved — so a sender asking for PAYMENT
+// silently gets the generic for dell, and one asking for payment gets a 404 for
+// bbva. And a key accepts ONE raw spelling: a new version sent in another
+// spelling is a 400 (TemplateKeyIdentityGuard).
+//
+// Lowercasing on the way out would therefore make it WORSE: every new version
+// of a PAYMENT key would 400, and a new bbva version would vanish for PAYMENT
+// senders. The UI cannot repair the data. What it can do is stop adding drift,
+// by sending the spelling the catalogue already uses for this identity.
+
+/** Which rule picked the spelling — also what the author is told about it. */
+export type SpellingRule =
+  /** The key being written already exists: its reserved spelling, or a 400. */
+  | "EXISTING_KEY"
+  /** A new variant under an existing generic: the generic's spelling. */
+  | "GENERIC"
+  /** No generic, but other variants of the pair: their most common spelling. */
+  | "SIBLINGS"
+  /** Nothing stored for the pair: the canonical form, the one spelling that cannot drift. */
+  | "CANONICAL"
+  /** The catalogue has not loaded (or a half is blank): exactly what was typed. */
+  | "TYPED";
+
+export interface SentSpelling extends ActionSpelling {
+  rule: SpellingRule;
+}
+
+type CatalogueRow = Pick<
+  TemplateSummary,
+  "templateKey" | "version" | "action" | "actionType" | "collector"
+>;
+
+/** One row per templateKey — its highest version, whose spelling the key reserves. */
+function latestPerKey(rows: CatalogueRow[]): CatalogueRow[] {
+  const byKey = new Map<string, CatalogueRow>();
+  for (const row of rows) {
+    const existing = byKey.get(row.templateKey);
+    if (!existing || row.version > existing.version) byKey.set(row.templateKey, row);
+  }
+  return [...byKey.values()];
+}
+
+/**
+ * Every raw spelling the catalogue stores for the canonical pair being typed,
+ * most common first, one vote per key. Empty while the catalogue is not loaded.
+ * More than one entry means the catalogue has already drifted, which the form
+ * tells the author.
+ */
+export function pairSpellings(
+  identity: Identity,
+  catalogue: CatalogueRow[] | null,
+): ActionSpelling[] {
+  if (!catalogue) return [];
+  return storedSpellings(latestPerKey(catalogue), identity.action, identity.actionType).map(
+    (spelling) => ({ action: spelling.action, actionType: spelling.actionType }),
+  );
+}
+
+/**
+ * The action/actionType spelling to SEND for the identity being authored.
+ *
+ * The author types freely; this decides what goes on the wire, in order:
+ *
+ * 1. EXISTING_KEY — a stored key names this exact identity (canonical pair plus
+ *    collector). Its spelling is not a preference but a requirement: the key
+ *    reserves one raw spelling and rejects any other with a 400. Taken from the
+ *    key's latest version.
+ * 2. GENERIC — a new variant under an existing generic. The generic's spelling,
+ *    so that a sender resolving in the generic's spelling — the one every client
+ *    already works with — finds the new variant instead of falling back past it.
+ * 3. SIBLINGS — no generic, but other variants exist. Their most common
+ *    spelling (one vote per key, ties broken by code-point order), for the same
+ *    reason one level down.
+ * 4. CANONICAL — nothing stored for the pair: the canonical lowercase form. A
+ *    brand-new template has no spelling to agree with, and the canonical one is
+ *    the only spelling a future author cannot get "wrong".
+ *
+ * TYPED when the catalogue is not available: sending what the author typed is
+ * exactly the old behaviour, and a guess made without the catalogue could
+ * cause the very 400 rule 1 exists to avoid. That fallback is never silent in
+ * the page: CreatePage blocks the submit while the catalogue is on its first
+ * load, and warns when it could not be read or was truncated.
+ */
+export function spellingFor(
+  identity: Identity,
+  catalogue: CatalogueRow[] | null,
+): SentSpelling {
+  const typed = { action: identity.action.trim(), actionType: identity.actionType.trim() };
+  const canonicalAction = canonicalActionName(typed.action);
+  const canonicalType = canonicalActionName(typed.actionType);
+  if (!catalogue || canonicalAction === "" || canonicalType === "") {
+    return { ...typed, rule: "TYPED" };
+  }
+
+  const pair = latestPerKey(catalogue).filter(
+    (row) =>
+      canonicalActionName(row.action) === canonicalAction &&
+      canonicalActionName(row.actionType) === canonicalType,
+  );
+  const pick = (row: CatalogueRow, rule: SpellingRule): SentSpelling => ({
+    action: row.action,
+    actionType: row.actionType,
+    rule,
+  });
+  const newest = (rows: CatalogueRow[]) =>
+    rows.reduce((best, row) => (row.version > best.version ? row : best));
+
+  const collector = normalizeCollector(identity.collector);
+  const sameKey = pair.filter((row) => normalizeCollector(row.collector ?? "") === collector);
+  if (sameKey.length > 0) return pick(newest(sameKey), "EXISTING_KEY");
+
+  const generic = pair.filter((row) => normalizeCollector(row.collector ?? "") === "");
+  if (generic.length > 0) return pick(newest(generic), "GENERIC");
+
+  const [mostCommon] = storedSpellings(pair, typed.action, typed.actionType);
+  if (mostCommon) {
+    return { action: mostCommon.action, actionType: mostCommon.actionType, rule: "SIBLINGS" };
+  }
+
+  return { action: canonicalAction, actionType: canonicalType, rule: "CANONICAL" };
+}
+
+const SPELLING_REASON: Record<Exclude<SpellingRule, "TYPED">, string> = {
+  EXISTING_KEY: "para coincidir con la plantilla existente",
+  GENERIC: "para coincidir con la plantilla genérica",
+  SIBLINGS: "para coincidir con las variantes existentes",
+  CANONICAL: "en su forma canónica",
+};
+
+export interface SpellingHints {
+  action: string | null;
+  actionType: string | null;
+}
+
+/**
+ * The quiet notes under Action and Action type.
+ *
+ * Only when there is something to say: the value sent differs from the one
+ * typed (the author must not discover in the catalogue that "payment" was saved
+ * as PAYMENT), or the catalogue already holds this pair in more than one
+ * spelling (the author should know the send path gives different answers
+ * depending on how the sender writes it). Nothing while the catalogue is not
+ * loaded — TYPED sends what is on screen, so there is no difference to report.
+ */
+export function spellingHints(
+  identity: Identity,
+  sent: SentSpelling,
+  spellings: ActionSpelling[],
+): SpellingHints {
+  const noteFor = (typed: string, value: string): string | null =>
+    sent.rule !== "TYPED" && value !== typed.trim()
+      ? `Se enviará como ${value} ${SPELLING_REASON[sent.rule]}.`
+      : null;
+
+  const actionNote = noteFor(identity.action, sent.action);
+  const conflictNote =
+    spellings.length > 1
+      ? `El catálogo ya tiene esta plantilla escrita de ${spellings.length} formas (${spellings
+          .map((spelling) => `${spelling.action}/${spelling.actionType}`)
+          .join(", ")}): el envío responde distinto según cuál use el emisor.`
+      : null;
+
+  const action = [actionNote, conflictNote].filter(Boolean).join(" ");
+  return {
+    action: action === "" ? null : action,
+    actionType: noteFor(identity.actionType, sent.actionType),
+  };
 }

@@ -32,6 +32,15 @@ if (typeof globalThis !== "undefined" && !("ResizeObserver" in globalThis)) {
     NoopResizeObserver as unknown as typeof globalThis.ResizeObserver;
 }
 
+// Mantine's Combobox scrolls the selected option into view when a Select opens
+// with a value already chosen. jsdom does not implement `scrollIntoView`, and
+// the call happens in an effect, so the TypeError escapes the test as an
+// UNHANDLED error — every assertion passes and `vitest run` still exits 1. A
+// no-op is enough: no test asserts on scroll position.
+if (typeof Element !== "undefined" && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function scrollIntoView() {};
+}
+
 // Mantine's autosize Textarea listens for `document.fonts` "loadingdone" to
 // recalculate height once web fonts load. jsdom does not implement the
 // FontFaceSet API at all (`document.fonts` is undefined), which crashes the

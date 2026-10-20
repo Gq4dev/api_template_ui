@@ -10,6 +10,9 @@ import {
   detachSourceTemplateKey,
   fromVersionHref,
   identityMatchesSource,
+  pairSpellings,
+  spellingFor,
+  spellingHints,
   initialFormValues,
   isPublishedStatus,
   seedFromVersion,
@@ -495,5 +498,149 @@ describe("create from an existing version", () => {
       const typed = { ...SOURCE, action: "PAYMENT", templateKey: "my_key" };
       expect(detachSourceTemplateKey(typed, SOURCE).templateKey).toBe("my_key");
     });
+  });
+});
+
+describe("spelling sent on create", () => {
+  const stored = (
+    templateKey: string,
+    version: number,
+    action: string,
+    actionType: string,
+    collector: string | null,
+  ) => ({ templateKey, version, action, actionType, collector });
+
+  // The live catalogue: generic and bbva as PAYMENT/APPROVED, dell as payment/approved.
+  const LIVE = [
+    stored("payment_approved", 3, "PAYMENT", "APPROVED", null),
+    stored("payment_approved", 2, "PAYMENT", "APPROVED", null),
+    stored("payment_approved__bbva", 1, "PAYMENT", "APPROVED", "bbva"),
+    stored("payment_approved__dell", 1, "payment", "approved", "dell"),
+  ];
+  const CONSISTENT = LIVE.slice(0, 3);
+
+  const identity = (action: string, actionType: string, collector = "") => ({
+    action,
+    actionType,
+    collector,
+  });
+
+  // A key reserves one raw spelling; anything else is a 400.
+  it("rule 1: an existing key's reserved spelling", () => {
+    expect(spellingFor(identity("payment", "approved"), LIVE)).toEqual({
+      action: "PAYMENT",
+      actionType: "APPROVED",
+      rule: "EXISTING_KEY",
+    });
+    expect(spellingFor(identity("PAYMENT", "APPROVED", "DELL"), LIVE)).toEqual({
+      action: "payment",
+      actionType: "approved",
+      rule: "EXISTING_KEY",
+    });
+  });
+
+  it("rule 2: a new variant takes the generic's spelling", () => {
+    expect(spellingFor(identity("payment", "approved", "newco"), LIVE)).toEqual({
+      action: "PAYMENT",
+      actionType: "APPROVED",
+      rule: "GENERIC",
+    });
+  });
+
+  it("rule 3: without a generic, the most common spelling among the variants", () => {
+    const noGeneric = [
+      stored("order_created__a", 1, "Order", "Created", "a"),
+      stored("order_created__b", 1, "Order", "Created", "b"),
+      stored("order_created__c", 4, "order", "created", "c"),
+    ];
+    expect(spellingFor(identity("ORDER", "CREATED", "z"), noGeneric)).toEqual({
+      action: "Order",
+      actionType: "Created",
+      rule: "SIBLINGS",
+    });
+  });
+
+  // One key with many versions is still one vote.
+  it("rule 3 counts keys, not versions", () => {
+    const manyVersions = [
+      stored("x_y__a", 1, "X", "Y", "a"),
+      stored("x_y__a", 2, "X", "Y", "a"),
+      stored("x_y__a", 3, "X", "Y", "a"),
+      stored("x_y__b", 1, "x", "y", "b"),
+      stored("x_y__c", 1, "x", "y", "c"),
+    ];
+    expect(spellingFor(identity("x", "y", "z"), manyVersions).action).toBe("x");
+  });
+
+  it("rule 4: nothing stored for the pair, the canonical form", () => {
+    expect(spellingFor(identity("Refund Done", "OK"), LIVE)).toEqual({
+      action: "refund_done",
+      actionType: "ok",
+      rule: "CANONICAL",
+    });
+  });
+
+  it("sends exactly what was typed while the catalogue has not loaded", () => {
+    expect(spellingFor(identity(" payment ", "approved"), null)).toEqual({
+      action: "payment",
+      actionType: "approved",
+      rule: "TYPED",
+    });
+  });
+
+  describe("spellingHints", () => {
+    it("says what will be sent when it differs from what was typed", () => {
+      const typed = identity("payment", "APPROVED");
+      expect(
+        spellingHints(typed, spellingFor(typed, CONSISTENT), pairSpellings(typed, CONSISTENT)),
+      ).toEqual({
+        action: "Se enviará como PAYMENT para coincidir con la plantilla existente.",
+        actionType: null,
+      });
+    });
+
+    it("names the rule that chose the spelling", () => {
+      const typed = identity("payment", "approved", "newco");
+      expect(
+        spellingHints(typed, spellingFor(typed, CONSISTENT), pairSpellings(typed, CONSISTENT))
+          .actionType,
+      ).toBe("Se enviará como APPROVED para coincidir con la plantilla genérica.");
+    });
+
+    it("says nothing when typed and sent agree, or before the catalogue loads", () => {
+      const exact = identity("PAYMENT", "APPROVED");
+      expect(
+        spellingHints(exact, spellingFor(exact, CONSISTENT), pairSpellings(exact, CONSISTENT)),
+      ).toEqual({ action: null, actionType: null });
+
+      const loose = identity("payment", "approved");
+      expect(spellingHints(loose, spellingFor(loose, null), pairSpellings(loose, null))).toEqual({
+        action: null,
+        actionType: null,
+      });
+    });
+
+    it("warns when the catalogue already holds the pair in more than one spelling", () => {
+      const typed = identity("PAYMENT", "APPROVED");
+      expect(spellingHints(typed, spellingFor(typed, LIVE), pairSpellings(typed, LIVE)).action).toBe(
+        "El catálogo ya tiene esta plantilla escrita de 2 formas (PAYMENT/APPROVED, payment/approved): el envío responde distinto según cuál use el emisor.",
+      );
+    });
+  });
+
+  // The new-version hint must agree with the server about what is "the same key".
+  it("compares the source identity canonically", () => {
+    expect(
+      identityMatchesSource(
+        { action: "payment", actionType: "approved", collector: "" },
+        { action: "PAYMENT", actionType: "APPROVED", collector: "" },
+      ),
+    ).toBe(true);
+    expect(
+      identityMatchesSource(
+        { action: "order.created", actionType: "x", collector: " BBVA" },
+        { action: "ORDER_CREATED", actionType: "X", collector: "bbva" },
+      ),
+    ).toBe(true);
   });
 });

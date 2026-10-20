@@ -15,18 +15,29 @@
 // the result of the last question that was actually asked, which is exactly the
 // guarantee this panel needs: refetch rather than remember.
 //
+// ONE QUESTION MAY BE SEVERAL CALLS. The backend matches action/actionType on
+// /resolve EXACTLY as stored, and the catalogue can hold one template in more
+// than one spelling (PAYMENT and payment). Each spelling is a different answer
+// for whoever sends the mail, so the caller passes every stored spelling and
+// this asks once per spelling. The caller bounds that list to the spellings the
+// catalogue actually holds for the pair.
+//
 // The render runs locally against the vendored core, the same path useRowPreview
 // takes. There is no server-side render to call — the API stores templates and
 // decides which version is live; it does not parse or render them.
 import { useMutation } from "@tanstack/react-query";
 import { templatesApi } from "../api/templatesClient";
 import type { TemplateContentResponse } from "../api/types";
+import type { ActionSpelling } from "../lib/actionNames";
 import { renderDraft } from "../preview/client";
 import type { PreviewVariant, RenderResult } from "../preview/protocol";
 
 export interface ResolveByActionVariables {
-  action: string;
-  actionType: string;
+  /**
+   * The raw spellings to ask in, most common first. Never empty. One entry is
+   * the normal case and behaves exactly like a single call.
+   */
+  spellings: ActionSpelling[];
   /** Empty means "no collector asked for" — resolve the generic. */
   collector: string;
   variant: PreviewVariant;
@@ -67,62 +78,120 @@ export interface ResolveByActionResult {
    * was asked for, so it has to come from here.
    */
   requestedCollector: string;
-  /**
-   * The action and action type this answer was asked about.
-   *
-   * Carried for a different reason than the collector: not to be DISPLAYED, but
-   * so the caller can tell whether this result still answers the question on
-   * screen. `mutation.reset()` cannot cancel a `mutationFn` already in flight,
-   * so a slow response lands on the observer no matter how many times the
-   * selection changed in the meantime — and a resolution read under the wrong
-   * triple is not stale, it is false. See `resolutionMatchesSelection`.
-   */
+  /** The exact spelling this one answer was asked in. */
   requestedAction: string;
   requestedActionType: string;
 }
 
-export function useResolveByAction() {
-  return useMutation<ResolveByActionResult, Error, ResolveByActionVariables>({
-    mutationFn: async ({ action, actionType, collector, variant }) => {
-      const content = await templatesApi.resolveByAction(action, actionType, {
-        // Passed through untrimmed of nothing but whitespace: the server
-        // canonicalizes case, and an empty value is dropped by the client so
-        // the parameter is omitted rather than sent blank.
-        collector: collector.trim() || undefined,
-      });
+/** One spelling's outcome: an answer, or the reason there is none. */
+export interface SpellingAnswer {
+  spelling: ActionSpelling;
+  result: ResolveByActionResult | null;
+  error: Error | null;
+}
 
-      const asked = {
+export interface ResolveAcrossSpellingsResult {
+  /** One entry per spelling asked, in the order they were passed. */
+  answers: SpellingAnswer[];
+  /**
+   * The question this result answers, for the caller's staleness check.
+   *
+   * Carried not to be DISPLAYED but so the caller can tell whether this result
+   * still answers the question on screen. `mutation.reset()` cannot cancel a
+   * `mutationFn` already in flight, so a slow response lands on the observer no
+   * matter how many times the selection changed in the meantime — and a
+   * resolution read under the wrong triple is not stale, it is false. The
+   * action pair is the first spelling; `resolutionMatchesSelection` compares it
+   * canonically, so any stored spelling of the pair names the same question.
+   */
+  requestedAction: string;
+  requestedActionType: string;
+  requestedCollector: string;
+}
+
+async function resolveOne(
+  spelling: ActionSpelling,
+  collector: string,
+  variant: PreviewVariant,
+): Promise<ResolveByActionResult> {
+  const content = await templatesApi.resolveByAction(
+    spelling.action,
+    spelling.actionType,
+    {
+      // Passed through untrimmed of nothing but whitespace: the server
+      // canonicalizes the collector's case, and an empty value is dropped by
+      // the client so the parameter is omitted rather than sent blank.
+      collector: collector.trim() || undefined,
+    },
+  );
+
+  const asked = {
+    requestedCollector: collector.trim(),
+    requestedAction: spelling.action.trim(),
+    requestedActionType: spelling.actionType.trim(),
+  };
+
+  // Caught HERE rather than allowed to reject, so the API's answer survives a
+  // dead engine. Only the rendered-mail area loses something; the banners and
+  // the badges are built from `content` and go on saying what the send path
+  // would actually do. A genuine API failure is untouched by this and still
+  // rejects, because the await above is outside the try.
+  try {
+    const render = await renderDraft({
+      action: content.action,
+      actionType: content.actionType,
+      html: content.html,
+      subject: content.subject ?? undefined,
+      variant,
+    });
+    return { content, render, engineErrorMessage: null, ...asked };
+  } catch (error) {
+    return {
+      content,
+      render: null,
+      engineErrorMessage:
+        error instanceof Error ? error.message : "el motor de render no pudo arrancar",
+      ...asked,
+    };
+  }
+}
+
+export function useResolveByAction() {
+  return useMutation<ResolveAcrossSpellingsResult, Error, ResolveByActionVariables>({
+    mutationFn: async ({ spellings, collector, variant }) => {
+      const [first] = spellings;
+      const question = {
+        requestedAction: first.action.trim(),
+        requestedActionType: first.actionType.trim(),
         requestedCollector: collector.trim(),
-        requestedAction: action.trim(),
-        requestedActionType: actionType.trim(),
       };
 
-      // Caught HERE rather than allowed to reject the mutation, so the API's
-      // answer survives a dead engine. Only the rendered-mail area loses
-      // something; the banners and the badges below are built from `content`
-      // and go on saying what the send path would actually do. A genuine API
-      // failure is untouched by this and still rejects, because the await above
-      // is outside the try.
-      try {
-        const render = await renderDraft({
-          action: content.action,
-          actionType: content.actionType,
-          html: content.html,
-          subject: content.subject ?? undefined,
-          variant,
-        });
-        return { content, render, engineErrorMessage: null, ...asked };
-      } catch (error) {
-        return {
-          content,
-          render: null,
-          engineErrorMessage:
-            error instanceof Error
-              ? error.message
-              : "el motor de render no pudo arrancar",
-          ...asked,
-        };
+      // One spelling: exactly the old single call, including REJECTING on an
+      // API failure, so the panel's error path is unchanged.
+      if (spellings.length === 1) {
+        const result = await resolveOne(first, collector, variant);
+        return { answers: [{ spelling: first, result, error: null }], ...question };
       }
+
+      // Several: every spelling is asked, and a failure stays with its own
+      // spelling. A 404 for `payment` next to a real answer for `PAYMENT` is the
+      // finding, not a reason to show nothing.
+      const settled = await Promise.allSettled(
+        spellings.map((spelling) => resolveOne(spelling, collector, variant)),
+      );
+      return {
+        answers: settled.map((outcome, index) => ({
+          spelling: spellings[index],
+          result: outcome.status === "fulfilled" ? outcome.value : null,
+          error:
+            outcome.status === "rejected"
+              ? outcome.reason instanceof Error
+                ? outcome.reason
+                : new Error(String(outcome.reason))
+              : null,
+        })),
+        ...question,
+      };
     },
   });
 }
