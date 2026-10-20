@@ -206,15 +206,72 @@ export function fromWireContent(wire: WireTemplateContentResult): TemplateConten
 // Optional fields stay OMITTED when unset, never sent as null: on create, an
 // absent collector means the generic and an explicit null is a different
 // payload the server would have to interpret.
+//
+// Each body is typed against its own `Wire*Request`, field names taken from
+// the /v3/api-docs schemas (`CreateTemplateCommand`, …), so a misspelled key is
+// an excess-property error at compile time instead of a field the server drops.
 
-function compact<T extends Record<string, unknown>>(body: T): Partial<T> {
-  return Object.fromEntries(
-    Object.entries(body).filter(([, value]) => value !== undefined),
-  ) as Partial<T>;
+/** `CreateTemplateCommand`. */
+export interface WireCreateTemplateRequest {
+  action: string;
+  action_type: string;
+  collector?: string;
+  template_key?: string;
+  html: string;
+  subject?: string;
+  variables?: string[];
+  // Accepted by the API; the UI publishes separately and never sends them.
+  effective_from?: string;
+  effective_to?: string;
 }
 
-export function toWireCreate(req: CreateTemplateRequest) {
-  return compact({
+/** `UploadUrlCommand`. */
+export interface WireUploadUrlRequest {
+  template_key: string;
+  action?: string;
+  action_type?: string;
+  collector?: string;
+}
+
+/** `CommitCommand`. */
+export interface WireCommitRequest {
+  action: string;
+  action_type: string;
+  collector?: string;
+  template_key: string;
+  s3_key: string;
+  variables?: string[];
+  subject?: string;
+  // Accepted by the API; the UI publishes separately and never sends them.
+  effective_from?: string;
+  effective_to?: string;
+}
+
+/** `UpdateDraftCommand`. */
+export interface WireUpdateDraftRequest {
+  html: string;
+  subject?: string;
+  variables?: string[];
+}
+
+/** `PublishCommand`. */
+export interface WirePublishRequest {
+  effective_from?: string;
+  effective_to?: string;
+}
+
+/**
+ * Drops undefined values. Typed as identity: callers pass the wire type
+ * explicitly, so the object literal is checked against it before compaction.
+ */
+function compact<T extends object>(body: T): T {
+  return Object.fromEntries(
+    Object.entries(body).filter(([, value]) => value !== undefined),
+  ) as T;
+}
+
+export function toWireCreate(req: CreateTemplateRequest): WireCreateTemplateRequest {
+  return compact<WireCreateTemplateRequest>({
     action: req.action,
     action_type: req.actionType,
     template_key: req.templateKey,
@@ -225,8 +282,8 @@ export function toWireCreate(req: CreateTemplateRequest) {
   });
 }
 
-export function toWireUploadUrl(req: UploadUrlRequest) {
-  return compact({
+export function toWireUploadUrl(req: UploadUrlRequest): WireUploadUrlRequest {
+  return compact<WireUploadUrlRequest>({
     template_key: req.templateKey,
     action: req.action,
     action_type: req.actionType,
@@ -234,8 +291,8 @@ export function toWireUploadUrl(req: UploadUrlRequest) {
   });
 }
 
-export function toWireCommit(req: CommitRequest) {
-  return compact({
+export function toWireCommit(req: CommitRequest): WireCommitRequest {
+  return compact<WireCommitRequest>({
     action: req.action,
     action_type: req.actionType,
     template_key: req.templateKey,
@@ -246,12 +303,19 @@ export function toWireCommit(req: CommitRequest) {
   });
 }
 
-export function toWireUpdateDraft(req: UpdateDraftRequest) {
-  return compact({ html: req.html, subject: req.subject, variables: req.variables });
+export function toWireUpdateDraft(req: UpdateDraftRequest): WireUpdateDraftRequest {
+  return compact<WireUpdateDraftRequest>({
+    html: req.html,
+    subject: req.subject,
+    variables: req.variables,
+  });
 }
 
-export function toWirePublish(req: PublishRequest) {
-  return compact({ effective_from: req.effectiveFrom, effective_to: req.effectiveTo });
+export function toWirePublish(req: PublishRequest): WirePublishRequest {
+  return compact<WirePublishRequest>({
+    effective_from: req.effectiveFrom,
+    effective_to: req.effectiveTo,
+  });
 }
 
 const LIST_PARAM_NAMES: Record<keyof ListTemplatesParams, string> = {

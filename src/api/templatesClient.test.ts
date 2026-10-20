@@ -40,6 +40,14 @@ const WIRE_SUMMARY = {
   created_at: "2026-09-30T12:00:00Z",
 };
 
+const WIRE_CREATE_RESULT = {
+  template_key: "payment_approved",
+  version: 1,
+  status: "DRAFT",
+  s3_key: "templates/payment_approved/v1.html",
+  checksum: "sha256:ab",
+};
+
 describe("templatesApi — snake_case at the boundary", () => {
   it("sends list filters as snake_case query params and maps the page", async () => {
     const fetchMock = answer({
@@ -116,6 +124,138 @@ describe("templatesApi — snake_case at the boundary", () => {
       s3Key: "templates/payment_approved/v1.html",
       checksum: "sha256:ab",
     });
+  });
+
+  it("updates a draft with PUT, the author header and a snake_case body", async () => {
+    const fetchMock = answer(WIRE_CREATE_RESULT);
+
+    const result = await templatesApi.updateDraft(
+      "payment_approved__BBVA",
+      2,
+      { html: "<p>v2</p>", subject: "Hola", variables: ["name"] },
+      { author: "dev@local" },
+    );
+
+    const { url, init, body } = sent(fetchMock);
+    expect(url).toBe(`${BASE}/payment_approved__BBVA/versions/2`);
+    expect(init.method).toBe("PUT");
+    expect(init.headers).toEqual({
+      "Content-Type": "application/json",
+      "X-User-Email": "dev@local",
+    });
+    expect(body).toEqual({ html: "<p>v2</p>", subject: "Hola", variables: ["name"] });
+    expect(result.s3Key).toBe("templates/payment_approved/v1.html");
+  });
+
+  it("commits with the author header and a snake_case body", async () => {
+    const fetchMock = answer(WIRE_CREATE_RESULT, 201);
+
+    await templatesApi.commit(
+      {
+        action: "payment",
+        actionType: "approved",
+        templateKey: "payment_approved__BBVA",
+        s3Key: "templates/payment_approved__BBVA/v1.html",
+        variables: ["name"],
+        subject: "Hola",
+        collector: "BBVA",
+      },
+      { author: "dev@local" },
+    );
+
+    const { url, init, body } = sent(fetchMock);
+    expect(url).toBe(`${BASE}/commit`);
+    expect(init.method).toBe("POST");
+    // No Idempotency-Key: the commit endpoint does not declare one.
+    expect(init.headers).toEqual({
+      "Content-Type": "application/json",
+      "X-User-Email": "dev@local",
+    });
+    expect(body).toEqual({
+      action: "payment",
+      action_type: "approved",
+      template_key: "payment_approved__BBVA",
+      s3_key: "templates/payment_approved__BBVA/v1.html",
+      variables: ["name"],
+      subject: "Hola",
+      collector: "BBVA",
+    });
+  });
+
+  it("requests an upload URL with a snake_case body and maps the answer", async () => {
+    const fetchMock = answer({
+      upload_url: "https://s3.example/put",
+      s3_key: "templates/payment_approved/v1.html",
+      expires_in: 900,
+    });
+
+    const result = await templatesApi.requestUploadUrl({
+      templateKey: "payment_approved",
+      action: "payment",
+      actionType: "approved",
+    });
+
+    const { url, init, body } = sent(fetchMock);
+    expect(url).toBe(`${BASE}/upload-url`);
+    expect(init.method).toBe("POST");
+    // The endpoint declares no author header.
+    expect(init.headers).toEqual({ "Content-Type": "application/json" });
+    expect(body).toEqual({
+      template_key: "payment_approved",
+      action: "payment",
+      action_type: "approved",
+    });
+    expect(result).toEqual({
+      uploadUrl: "https://s3.example/put",
+      s3Key: "templates/payment_approved/v1.html",
+      expiresIn: 900,
+    });
+  });
+
+  it("archives with a bodiless POST and no author header", async () => {
+    const fetchMock = answer({
+      template_key: "payment_approved",
+      version: 1,
+      status: "ARCHIVED",
+      effective_from: "2026-01-01T00:00:00Z",
+      effective_to: "2026-10-20T00:00:00Z",
+    });
+
+    const result = await templatesApi.archive("payment_approved", 1);
+
+    const { url, init, body } = sent(fetchMock);
+    expect(url).toBe(`${BASE}/payment_approved/versions/1/archive`);
+    expect(init.method).toBe("POST");
+    expect(init.headers).toEqual({ "Content-Type": "application/json" });
+    expect(body).toBeUndefined();
+    expect(result).toEqual({
+      templateKey: "payment_approved",
+      version: 1,
+      status: "ARCHIVED",
+      effectiveFrom: "2026-01-01T00:00:00Z",
+      effectiveTo: "2026-10-20T00:00:00Z",
+    });
+  });
+
+  it("publishes with the author header", async () => {
+    const fetchMock = answer({
+      template_key: "payment_approved",
+      version: 1,
+      status: "ACTIVE",
+      effective_from: "2026-10-20T00:00:00Z",
+      effective_to: null,
+    });
+
+    await templatesApi.publish("payment_approved", 1, {}, { author: "dev@local" });
+
+    const { init, body } = sent(fetchMock);
+    expect(init.method).toBe("POST");
+    expect(init.headers).toEqual({
+      "Content-Type": "application/json",
+      "X-User-Email": "dev@local",
+    });
+    // An empty payload means "live now": nothing is sent, not nulls.
+    expect(body).toEqual({});
   });
 
   it("publishes with snake_case effectivity and maps the status", async () => {
