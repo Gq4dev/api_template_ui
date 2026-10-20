@@ -286,10 +286,9 @@ export function catalogueCollectorGroups(
 ): CollectorCatalogueGroup[] {
   if (action === "" || actionType === "") return [];
 
-  // Sets keyed by the NORMALIZED name, because the server canonicalizes case
-  // and the catalogue may still hold rows authored before it did. `BBVA` and
-  // `bbva` are one client, and suggesting both would let the reader pick the
-  // spelling that resolves to nothing. Deduping across the whole catalogue and
+  // Sets keyed by the NORMALIZED (trimmed) name. Case is kept: `BBVA` and
+  // `bbva` are two clients to the server, so both are offered. Deduping across
+  // the whole catalogue and
   // not per group matters more here than it did before: a name can now reach
   // this list from several action/actionType pairs at once, each free to spell
   // it differently.
@@ -472,8 +471,8 @@ export type GroupedSelectData = Array<SelectOption | SelectOptionGroup>;
  * and the page says what it omits: a client nobody authored anything for is
  * absent here, exactly as it is from {@link catalogueCollectorGroups}.
  *
- * Deduped by the same rules as that function — normalized, because `BBVA` and
- * `bbva` are one client, and with whitespace-only names dropped, because those
+ * Deduped by the same rules as that function — trimmed, keeping case, because
+ * `BBVA` and `bbva` are two clients, and with whitespace-only names dropped, because those
  * are the generic wearing spaces and would duplicate the blank option's value.
  */
 export function catalogueCollectorNames(groups: TemplateGroup[]): string[] {
@@ -832,8 +831,8 @@ export function genericDelivery(
  * should have been called.
  *
  * Every part is compared the way the server decides IDENTITY, which is not the
- * way it stores it. The collector is canonicalized on the way in, so `BBVA` and
- * `bbva` are one client. Action and action type are stored RAW but identified
+ * way it stores it. The collector is compared trimmed and case-sensitive, so
+ * `BBVA` and `bbva` are two clients. Action and action type are identified
  * canonically (`canonicalActionName`) — the live catalogue holds PAYMENT and
  * payment under keys derived from the same `payment_approved` — and the cascade
  * hands this function canonical names. A lookup that compared any part exactly
@@ -1032,9 +1031,9 @@ export interface ResolutionSelection {
  * stay honest.
  *
  * The collector is compared through {@link normalizeCollector} because the
- * server canonicalizes case and the value stored in the result was trimmed on
- * the way out: `BBVA` and `bbva` are one client, and a case-sensitive compare
- * would discard a perfectly valid answer as if it belonged to someone else.
+ * value stored in the result was trimmed on the way out. Case is compared as
+ * is: `BBVA` and `bbva` are two clients, so an answer about one is not an
+ * answer about the other.
  * Action and action type are compared CANONICALLY. The selection on screen
  * holds canonical names, while a resolution is asked in a raw stored spelling —
  * `PAYMENT` when the catalogue writes it that way — because the send path

@@ -389,18 +389,17 @@ describe("identity cascade", () => {
       ]);
     });
 
-    // The server canonicalizes case, so BBVA and bbva are one client. Two
-    // suggestions would let the reader pick the spelling that resolves to
-    // nothing — and now that names are gathered from the WHOLE catalogue, the
-    // two spellings can arrive from two different pairs.
-    it("collapses collectors that differ only in case, across pairs", () => {
+    // BBVA and bbva are two clients to the server, each with its own key, so
+    // they are two options — folding them would offer one name for two mails.
+    it("keeps collectors that differ only in case apart", () => {
       const groups = groupByTemplateKey([
-        row("payment_approved__bbva", 1, "ACTIVE", "payment", "approved", "BBVA"),
+        row("payment_approved__BBVA", 1, "ACTIVE", "payment", "approved", "BBVA"),
         row("payment_rejected__bbva", 1, "ACTIVE", "payment", "rejected", "bbva"),
       ]);
 
       expect(catalogueCollectorGroups(groups, "payment", "approved")).toEqual([
-        { group: COLLECTORS_STORED_HERE, items: ["bbva"] },
+        { group: COLLECTORS_STORED_HERE, items: ["BBVA"] },
+        { group: COLLECTORS_KNOWN_ELSEWHERE, items: ["bbva"] },
       ]);
     });
 
@@ -709,14 +708,12 @@ describe("identity cascade", () => {
       ).toBe(false);
     });
 
-    // The server canonicalizes case, so `BBVA` and `bbva` are one client.
-    // Comparing them literally would throw away a correct answer as if it
-    // belonged to somebody else — the guard would then be causing the blank
-    // panel it was written to prevent.
-    it("matches the collector case-insensitively, as the server does", () => {
+    // `BBVA` and `bbva` are two clients, so an answer about one is not an
+    // answer about the other.
+    it("matches the collector case-sensitively, as the server does", () => {
       expect(
         resolutionMatchesSelection(asked, { ...asked, collector: "BBVA" }),
-      ).toBe(true);
+      ).toBe(false);
     });
 
     // The mutation trims before sending, so the stored question is trimmed and
@@ -824,19 +821,18 @@ describe("identity cascade", () => {
       ).toBe("payment_approved");
     });
 
-    // The server canonicalizes case on the way in, so a case-sensitive lookup
-    // would report "no such template" about a row the reader just picked.
-    it("matches the collector case-insensitively, as the server does", () => {
+    // The server stores and matches the collector exactly: BBVA's variant is
+    // not bbva's, and finding one for the other would show the wrong mail.
+    it("matches the collector case-sensitively, as the server does", () => {
       const groups = groupByTemplateKey([
-        row("payment_approved__bbva", 1, "ACTIVE", "payment", "approved", "BBVA"),
+        row("payment_approved__BBVA", 1, "ACTIVE", "payment", "approved", "BBVA"),
       ]);
 
-      expect(findGroup(groups, "payment", "approved", "bbva")?.templateKey).toBe(
-        "payment_approved__bbva",
+      expect(findGroup(groups, "payment", "approved", "BBVA")?.templateKey).toBe(
+        "payment_approved__BBVA",
       );
-      expect(findGroup(catalogue, "payment", "approved", "BBVA")?.templateKey).toBe(
-        "payment_approved__bbva",
-      );
+      expect(findGroup(groups, "payment", "approved", "bbva")).toBeNull();
+      expect(findGroup(catalogue, "payment", "approved", "BBVA")).toBeNull();
     });
 
     // Blank and a named collector are opposite instructions, and the generic
@@ -867,17 +863,19 @@ describe("collector-first order", () => {
   const catalogue = groupByTemplateKey([
     row("payment_approved", 1, "ACTIVE", "payment", "approved"),
     row("payment_approved__bbva", 1, "ACTIVE", "payment", "approved", "bbva"),
-    // Spelled differently on purpose: the server canonicalizes case, so these
-    // are one client and must be one option.
-    row("payment_pending__bbva_old", 1, "ARCHIVED", "payment", "pending", "BBVA"),
+    // Same name in another case: a different client to the server, so a
+    // different option.
+    row("payment_pending__BBVA", 1, "ARCHIVED", "payment", "pending", "BBVA"),
+    // Same name with stray whitespace: trimmed, so the same client.
+    row("payment_pending__bbva", 1, "ARCHIVED", "payment", "pending", " bbva "),
     row("payment_rejected", 1, "ACTIVE", "payment", "rejected"),
     row("withdrawal_create__santander", 1, "ACTIVE", "withdrawal", "create", "santander"),
     row("refund_done__blank", 1, "ACTIVE", "refund", "done", "   "),
   ]);
 
   describe("catalogueCollectorNames", () => {
-    it("lists every distinct collector once, normalized, sorted, without blanks", () => {
-      expect(catalogueCollectorNames(catalogue)).toEqual(["bbva", "santander"]);
+    it("lists every distinct collector once, trimmed, sorted, without blanks", () => {
+      expect(catalogueCollectorNames(catalogue)).toEqual(["bbva", "BBVA", "santander"]);
     });
 
     it("is empty for a catalogue of generics only", () => {
@@ -889,6 +887,7 @@ describe("collector-first order", () => {
     expect(collectorFirstCollectorData(catalogue)).toEqual([
       { value: "", label: "Genérica" },
       { value: "bbva", label: "bbva" },
+      { value: "BBVA", label: "BBVA" },
       { value: "santander", label: "santander" },
     ]);
   });
@@ -992,8 +991,15 @@ describe("collector-first order", () => {
 
       it("adopts the offered spelling so the Select does not render blank", () => {
         expect(
-          switchBrowseMode({ ...FULL, collector: "BBVA" }, "COLLECTOR_FIRST", ["bbva"]).collector,
+          switchBrowseMode({ ...FULL, collector: " bbva " }, "COLLECTOR_FIRST", ["bbva"]).collector,
         ).toBe("bbva");
+      });
+
+      // Another case is another client, not another spelling of this one.
+      it("does not adopt a collector that differs in case", () => {
+        expect(
+          switchBrowseMode({ ...FULL, collector: "BBVA" }, "COLLECTOR_FIRST", ["bbva"]),
+        ).toEqual(EMPTY_BROWSE_SELECTION);
       });
 
       // An action carried into an order whose first step is empty would be a
@@ -1235,7 +1241,7 @@ describe("mergeInventoryAnswers", () => {
   it("counts every collector once across spellings, sorted by name", () => {
     const merged = mergeInventoryAnswers([
       answer("2026-09-15T10:05:00Z", [entry("ibm", 1, true), entry("bbva", 1, true)]),
-      answer("2026-09-15T10:05:00Z", [entry("dell", 10, true), entry("BBVA", 1, true)]),
+      answer("2026-09-15T10:05:00Z", [entry("dell", 10, true), entry("bbva", 1, true)]),
     ]);
     expect(merged.inventory?.collectors.map((c) => c.collector)).toEqual(["bbva", "dell", "ibm"]);
     expect(merged.divergentCollectors.size).toBe(0);

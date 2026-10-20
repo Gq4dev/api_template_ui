@@ -9,9 +9,16 @@
 // untouched.
 //
 // Everything in this module mirrors a rule the SERVER already enforces. None of
-// it is the authority — the server rejects a mismatched templateKey with a 400
-// and canonicalizes case on its own. What lives here exists so the UI can SHOW
-// the operator the same answer the server is about to give, before they submit.
+// it is the authority — the server rejects a mismatched templateKey with a 400.
+// What lives here exists so the UI can SHOW the operator the same answer the
+// server is about to give, before they submit.
+//
+// CASE IS PART OF A COLLECTOR'S NAME. notification-template-service keeps the
+// collector exactly as sent — `BBVA` and `bbva` are two different clients,
+// with two different keys (`payment_approved__BBVA`, `payment_approved__bbva`)
+// — because folding case once merged collectors that were genuinely distinct.
+// Action and action type, by contrast, ARE lowercased by the server. Nothing in
+// this module may lowercase a collector.
 
 /**
  * The one function that decides whether a collector's format is acceptable.
@@ -24,9 +31,8 @@
  * picked the underscore as the canonical separator and now answers `bbva-sa`
  * with a 400 telling the caller to use `_`. A doubled underscore, a leading or
  * trailing underscore, and any whitespace are rejected for the same reason: each
- * would be a second spelling of a name that already has one. Case is still
- * canonicalized server-side, so `BBVA` and `bbva` remain the same collector and
- * both pass here.
+ * would be a second spelling of a name that already has one. Case is NOT
+ * folded: `BBVA` and `bbva` both pass here, as two different collectors.
  *
  * Because the rule lives only here, a future move costs one function body and
  * one message — so no caller may re-implement the regex, and no other module may
@@ -59,17 +65,15 @@ export const COLLECTOR_FORMAT_MESSAGE =
   "Collector solo admite letras y números separados por un único guion bajo. Por ejemplo: bbva_sa.";
 
 /**
- * Trim and lowercase, for DISPLAY.
+ * Trim, and nothing else — the one normalization a collector gets.
  *
- * Deliberately not applied before sending: the server canonicalizes case
- * itself, so normalizing on the way out would only add a second place that can
- * disagree with it. But what comes BACK is lowercase, so anything we render
- * next to a server answer has to be lowercase too — otherwise the operator sees
- * "BBVA" in the field and "bbva" in the response and reasonably wonders which
- * one the system actually used.
+ * Every comparison between two collector names goes through here, so this is
+ * also where case-sensitivity is decided: NOT lowercased, because the server
+ * stores and matches the collector exactly, and a UI that folded case would
+ * show `BBVA`'s variant as `bbva`'s and pick the wrong client's mail.
  */
 export function normalizeCollector(value: string): string {
-  return value.trim().toLowerCase();
+  return value.trim();
 }
 
 /**
@@ -93,8 +97,10 @@ export function deriveTemplateKey(
   actionType: string,
   collector: string,
 ): string {
-  const a = normalizeCollector(action);
-  const t = normalizeCollector(actionType);
+  // The server lowercases action and action type, and keeps the collector's
+  // case: `payment_approved__BBVA`.
+  const a = action.trim().toLowerCase();
+  const t = actionType.trim().toLowerCase();
   if (a === "" || t === "") return "";
 
   const c = normalizeCollector(collector);

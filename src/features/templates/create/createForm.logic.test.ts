@@ -150,7 +150,7 @@ describe("buildCreatePayload", () => {
     expect(payload).not.toHaveProperty("collector");
   });
 
-  it("sends a trimmed collector as typed — the server canonicalizes case", () => {
+  it("sends a trimmed collector as typed — its case is part of the name", () => {
     const payload = buildCreatePayload({
       ...EMPTY_CREATE_FORM_VALUES,
       action: "PAYMENT",
@@ -544,7 +544,7 @@ describe("spelling sent on create", () => {
       actionType: "APPROVED",
       rule: "EXISTING_KEY",
     });
-    expect(spellingFor(identity("PAYMENT", "APPROVED", "DELL"), LIVE)).toEqual({
+    expect(spellingFor(identity("PAYMENT", "APPROVED", "dell"), LIVE)).toEqual({
       action: "payment",
       actionType: "approved",
       rule: "EXISTING_KEY",
@@ -650,9 +650,16 @@ describe("spelling sent on create", () => {
     ).toBe(true);
     expect(
       identityMatchesSource(
-        { action: "order.created", actionType: "x", collector: " BBVA" },
+        { action: "order.created", actionType: "x", collector: " bbva" },
         { action: "ORDER_CREATED", actionType: "X", collector: "bbva" },
       ),
     ).toBe(true);
+    // The collector keeps its case on the server: BBVA is another template.
+    expect(
+      identityMatchesSource(
+        { action: "payment", actionType: "approved", collector: "BBVA" },
+        { action: "payment", actionType: "approved", collector: "bbva" },
+      ),
+    ).toBe(false);
   });
 });

@@ -170,9 +170,10 @@ type Identity = Pick<CreateFormValues, "action" | "actionType" | "collector">;
  *
  * Compared the way the server decides identity: action and action type through
  * `canonicalActionName` — "ORDER", "order " and "order.created"-style spellings
- * derive one key — and the collector trimmed and lowercased. Comparing raw
- * would announce "new template" to an author who only changed the case, while
- * the server would file the save as the next version of the same key.
+ * derive one key — and the collector trimmed but case-sensitive, because the
+ * server keeps its case: `BBVA` is a different key from `bbva`. Comparing
+ * action/type raw would announce "new template" to an author who only changed
+ * their case, while the server would file the save under the same key.
  */
 export function identityMatchesSource(values: Identity, source: Identity): boolean {
   return (

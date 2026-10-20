@@ -40,8 +40,8 @@ describe("buildListParams", () => {
       status: "ACTIVE",
       templateKey: "order-created",
       action: "ORDER",
-      // Trimmed but not lowercased: the server matches case-insensitively and
-      // canonicalizes on its own, so normalizing here would only add a second
+      // Trimmed but not lowercased: the list filter is a case-insensitive
+      // substring match on the server, so normalizing here would only add a second
       // place that can disagree with it.
       collector: "BBVA",
       page: 2,

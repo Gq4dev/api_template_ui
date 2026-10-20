@@ -200,11 +200,10 @@ export const templatesApi = {
   // different question from omitting the parameter ("a collector whose name is
   // blank" vs "no collector asked for"), and only the second one means generic.
   //
-  // The value goes out AS TYPED. The server canonicalizes case itself, so
-  // lowercasing here would add a second place that can disagree with it — and
-  // if the two ever drift, the UI would be sending something other than what
-  // the operator typed and reading back an answer to a question they did not
-  // ask. Display is normalized instead (see src/lib/collector.ts).
+  // The value goes out AS TYPED. The server matches the collector exactly —
+  // `BBVA` and `bbva` are two clients — so lowercasing here would ask about a
+  // different client than the one the operator named. Action and action type
+  // are lowercased by the server itself, so they need nothing either.
   resolveByAction(
     action: string,
     actionType: string,

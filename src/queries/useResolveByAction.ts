@@ -119,7 +119,7 @@ async function resolveOne(
     spelling.actionType,
     {
       // Passed through untrimmed of nothing but whitespace: the server
-      // canonicalizes the collector's case, and an empty value is dropped by
+      // matches the collector's case exactly, and an empty value is dropped by
       // the client so the parameter is omitted rather than sent blank.
       collector: collector.trim() || undefined,
     },

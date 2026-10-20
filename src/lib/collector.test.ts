@@ -15,9 +15,9 @@ describe("isValidCollector", () => {
     expect(isValidCollector("banco24")).toBe(true);
   });
 
-  // The server canonicalizes case itself, so an uppercase collector is the same
-  // collector — rejecting it here would invent a rule the API does not have.
-  it("accepts uppercase, because the server canonicalizes case", () => {
+  // Uppercase is a valid collector — a DIFFERENT one from its lowercase
+  // spelling. Rejecting it here would invent a rule the API does not have.
+  it("accepts uppercase", () => {
     expect(isValidCollector("BBVA")).toBe(true);
   });
 
@@ -58,9 +58,10 @@ describe("isValidCollector", () => {
 });
 
 describe("normalizeCollector", () => {
-  it("trims and lowercases, because that is how the server sends it back", () => {
-    expect(normalizeCollector("  BBVA  ")).toBe("bbva");
-    expect(normalizeCollector("Galicia")).toBe("galicia");
+  // BBVA and bbva are two clients to the server: folding case would merge them.
+  it("trims and keeps case", () => {
+    expect(normalizeCollector("  BBVA  ")).toBe("BBVA");
+    expect(normalizeCollector("Galicia")).toBe("Galicia");
     expect(normalizeCollector("")).toBe("");
   });
 });
@@ -81,9 +82,10 @@ describe("deriveTemplateKey", () => {
     );
   });
 
-  it("lowercases every part, whatever case it was typed in", () => {
+  // The server's own derivation: action and type lowercased, collector as sent.
+  it("lowercases action and actionType but keeps the collector's case", () => {
     expect(deriveTemplateKey("Payment", "Approved", "BBVA")).toBe(
-      "payment_approved__bbva",
+      "payment_approved__BBVA",
     );
   });
 
@@ -111,8 +113,8 @@ describe("collectorLabel", () => {
     expect(collectorLabel("   ")).toBe("Genérica");
   });
 
-  it("shows the collector lowercase, matching what the server returns", () => {
+  it("shows the collector exactly as stored", () => {
     expect(collectorLabel("bbva")).toBe("bbva");
-    expect(collectorLabel("BBVA")).toBe("bbva");
+    expect(collectorLabel(" BBVA ")).toBe("BBVA");
   });
 });

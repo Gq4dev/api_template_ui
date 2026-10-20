@@ -293,8 +293,9 @@ describe("CreatePage", () => {
       "BBVA",
     );
 
+    // Action and type lowercased, the collector kept as typed — as the server does.
     const keyField = screen.getByRole("textbox", { name: /^template key$/i });
-    expect(keyField).toHaveValue("payment_approved__bbva");
+    expect(keyField).toHaveValue("payment_approved__BBVA");
     expect(keyField).toHaveAttribute("readonly");
   });
 
