@@ -435,20 +435,21 @@ export function buildStarterTemplate(variables: string[]): string {
 
 // --- Spelling sent to the API -----------------------------------------------
 //
-// THE PROBLEM THIS EXISTS FOR. api-template canonicalizes only the collector.
-// action/actionType are stored exactly as sent and matched exactly by /resolve
-// and /collectors; only the templateKey is derived from their canonical form
-// (see `canonicalActionName`). Verified against the live API (2026-09-15): the
-// generic `payment_approved` and most variants are stored as PAYMENT/APPROVED,
-// `payment_approved__dell` as payment/approved — so a sender asking for PAYMENT
-// silently gets the generic for dell, and one asking for payment gets a 404 for
-// bbva. And a key accepts ONE raw spelling: a new version sent in another
-// spelling is a 400 (TemplateKeyIdentityGuard).
+// LEGACY TOLERANCE, PENDING REMOVAL. notification-template-service lowercases
+// action and actionType on storage, and /resolve lowercases what it is asked
+// for, so `PAYMENT` and `payment` are one action on both sides. A value in an
+// invalid format is rejected with a 400, never rewritten. The collector is kept
+// exactly as typed — case-sensitive (see `deriveTemplateKey`). There is no
+// /collectors endpoint.
 //
-// Lowercasing on the way out would therefore make it WORSE: every new version
-// of a PAYMENT key would 400, and a new bbva version would vanish for PAYMENT
-// senders. The UI cannot repair the data. What it can do is stop adding drift,
-// by sending the spelling the catalogue already uses for this identity.
+// This block was written for the old api-template, which kept action/actionType
+// raw and matched them exactly, so one identity could end up stored as both
+// PAYMENT/APPROVED and payment/approved, and a key rejected a new version sent
+// in a spelling other than the one it reserved. Against the current API a
+// store holds at most ONE spelling per pair — the lowercase one — so every rule
+// below lands on that spelling (or on what was typed, which the server
+// lowercases anyway) and the drift warning never fires. It is kept for now,
+// for stores still holding legacy rows, pending removal.
 
 /** Which rule picked the spelling — also what the author is told about it. */
 export type SpellingRule =
