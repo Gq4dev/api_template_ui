@@ -85,7 +85,7 @@ function renderFromSource(source: TemplateContentResponse = SOURCE) {
         status: source.status,
         action: source.action ?? "",
         actionType: source.actionType ?? "",
-        collector: source.collector,
+        collector: source.collector ?? null,
         subject: source.subject,
         effectiveFrom: source.effectiveFrom,
         effectiveTo: source.effectiveTo,
@@ -105,7 +105,7 @@ function renderFromSource(source: TemplateContentResponse = SOURCE) {
   render(
     <QueryClientProvider client={client}>
       <MantineProvider defaultColorScheme="light">
-        <MemoryRouter initialEntries={[fromVersionHref(source)]}>
+        <MemoryRouter initialEntries={[fromVersionHref({ ...source, collector: source.collector ?? null })]}>
           <Routes>
             <Route
               path="/create"

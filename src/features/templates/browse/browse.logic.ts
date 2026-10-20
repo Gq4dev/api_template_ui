@@ -949,14 +949,10 @@ export type ResolutionOutcome =
 /**
  * The shape this function is willing to be handed.
  *
- * Deliberately WIDER than {@link TemplateContentResponse}, whose
- * `fallbackToGeneric` is non-optional. That DTO describes the contract the API
- * team published, and it stays as it is — but the contract is not yet deployed:
- * the collector dimension lives on an unmerged backend branch, and the running
- * server drops the `collector` query parameter on the floor and answers with a
- * body carrying NEITHER `collector` NOR `fallbackToGeneric`. Typing this
- * parameter as the full response would be the UI telling itself a comforting
- * lie about bytes it has already seen arrive without those keys.
+ * Both keys are optional, as on {@link TemplateContentResponse} itself: a body
+ * may carry NEITHER `collector` NOR `fallbackToGeneric` (a server that never
+ * considered the collector), and `fromWireContent` copies them only when
+ * present, so key absence survives the mapping and is what this function reads.
  */
 export type ResolutionContent = Partial<
   Pick<TemplateContentResponse, "collector" | "fallbackToGeneric">

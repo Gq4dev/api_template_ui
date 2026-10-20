@@ -199,10 +199,10 @@ export function ResolutionAnswer({ result, error }: ResolutionAnswerProps) {
             {result.content.status}
           </Badge>
           <Badge
-            color={collectorBadgeColor(result.content.collector)}
+            color={collectorBadgeColor(result.content.collector ?? null)}
             variant={result.content.collector ? "filled" : "light"}
           >
-            {collectorLabel(result.content.collector)}
+            {collectorLabel(result.content.collector ?? null)}
           </Badge>
           <Text size="sm" c="dimmed">
             {result.content.templateKey} · v{result.content.version} ·{" "}

@@ -97,13 +97,14 @@ export interface WireTemplateContentResult {
   status: TemplateStatus;
   action: string;
   action_type: string;
-  collector: string | null;
+  // Optional: a body may carry neither key, see `fromWireContent`.
+  collector?: string | null;
   subject: string | null;
   variables: string[] | null;
   html: string;
   effective_from: string | null;
   effective_to: string | null;
-  fallback_to_generic: boolean;
+  fallback_to_generic?: boolean;
 }
 
 // `?? null` on every nullable field: Jackson may omit a null rather than send
@@ -197,7 +198,7 @@ export function fromWireContent(wire: WireTemplateContentResult): TemplateConten
     // both keys would erase the difference before it got there.
     ...("collector" in wire ? { collector: wire.collector ?? null } : {}),
     ...("fallback_to_generic" in wire ? { fallbackToGeneric: wire.fallback_to_generic } : {}),
-  } as TemplateContentResponse;
+  };
 }
 
 // ---- Requests ----

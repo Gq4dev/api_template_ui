@@ -171,7 +171,12 @@ export interface TemplateContentResponse {
   actionType: string;
   // The collector of the version ACTUALLY SERVED, which is not necessarily the
   // one that was asked for — see fallbackToGeneric below.
-  collector: string | null;
+  //
+  // OPTIONAL ON PURPOSE, like fallbackToGeneric: an ABSENT key means the server
+  // never reported the collector, while `null` means it named the generic as
+  // the version it served. `resolutionOutcome` tells the two apart by key
+  // presence, so the type keeps them apart too.
+  collector?: string | null;
   subject: string | null;
   variables: string[];
   html: string;
@@ -188,8 +193,10 @@ export interface TemplateContentResponse {
    * authored — which is exactly why the flag has to be surfaced loudly. An
    * operator looking at the generic while believing they are looking at
    * Santander's variant will go and fix the wrong document.
+   *
+   * Absent when the server did not report it — never read that as `false`.
    */
-  fallbackToGeneric: boolean;
+  fallbackToGeneric?: boolean;
 }
 
 // Preview and contract types used to live here. They described two endpoints
