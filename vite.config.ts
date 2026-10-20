@@ -11,7 +11,8 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
 
   /**
-   * Develop against a REMOTE api-template without touching its CORS policy.
+   * Develop against notification-template-service without touching its CORS
+   * policy — local or remote.
    *
    * CORS is enforced by the browser against the SERVER's response headers, so an
    * API that does not list this origin in CORS_ALLOWED_ORIGINS cannot be reached
@@ -24,17 +25,19 @@ export default defineConfig(({ mode }) => {
    * origin, nothing for CORS to block) and Node forwards the request, adding the
    * Basic credentials on the way out.
    *
-   * In .env.development — which is gitignored, and is the ONLY place the
-   * credentials should ever live:
+   * In .env.development or .env.local — both gitignored, and the ONLY places
+   * the credentials should ever live:
    *
-   *   API_PROXY_TARGET=https://templates.178.104.93.97.nip.io
-   *   API_PROXY_AUTH=user:password
+   *   API_PROXY_TARGET=https://<api-host>   (or http://localhost:8080)
+   *   API_PROXY_AUTH=user:password          (remote only)
    *   VITE_API_BASE_URL=/api/v1/templates
    *
    * VITE_API_BASE_URL must be RELATIVE. Left absolute, the browser goes
    * cross-origin again and the proxy is bypassed entirely.
    *
-   * Leave API_PROXY_TARGET unset to talk to a local backend directly.
+   * Leave API_PROXY_TARGET unset to talk to a backend directly, with an
+   * absolute VITE_API_BASE_URL; that origin must then be in the API's
+   * CORS_ALLOWED_ORIGINS.
    *
    * Dev only. A deployed UI has a real origin and no proxy, so that origin must
    * be added to the API's CORS_ALLOWED_ORIGINS (and given a way through the

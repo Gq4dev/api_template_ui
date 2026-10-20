@@ -22,22 +22,22 @@ reached the API and there is nothing stored yet, while an error banner means it 
 catalogue and the preview both run locally, so you can write a template and watch it render
 with nothing else running. The API is only needed to list, save, publish or archive.
 
-To run it, from the `api-template` repo root:
+The API is `notification-template-service`. To run it, from that repo's root:
 
 ```bash
-mvn package -DskipTests   # once
 .\run.ps1                 # loads .env, starts the API on http://localhost:8080
 ```
 
-Verify with `curl http://localhost:8080/actuator/health` → `{"status":"UP"}`.
+Verify with `curl http://localhost:8080/ping`. Its contract is the Swagger UI at
+<http://localhost:8080/swagger-ui.html> (`/v3/api-docs` for the JSON).
 
 `.env` there supplies `MONGODB_URI` and the AWS credentials — the backend talks to a real
 MongoDB and a real S3 bucket, so treat what you create as real data. Note that
 `docker-compose.yml` in that repo runs the *published image* of the API and does not provide
 storage of its own.
 
-The backend's default `CORS_ALLOWED_ORIGINS` already lists `http://localhost:5173`, so a
-local pair needs no extra configuration.
+Through the dev proxy (below) CORS does not come into it: the browser only ever talks to
+the Vite dev server.
 
 ## Routes
 
@@ -102,14 +102,16 @@ carrying an older copy.
 
 ## Pointing at a different backend
 
-`VITE_API_BASE_URL` in `.env.development` selects the API. Two shapes:
+`VITE_API_BASE_URL` in `.env.local` (or `.env.development`, which wins over it in dev)
+selects the API. The recommended shape goes through the dev proxy:
 
 | Target | `VITE_API_BASE_URL` | Also set |
 | --- | --- | --- |
-| Local backend | `http://localhost:8080/api/v1/templates` | — |
+| Local backend | `/api/v1/templates` (relative!) | `API_PROXY_TARGET=http://localhost:8080` |
 | Remote backend | `/api/v1/templates` (relative!) | `API_PROXY_TARGET`, `API_PROXY_AUTH` |
+| Direct, no proxy | `http://localhost:8080/api/v1/templates` | origin in the API's `CORS_ALLOWED_ORIGINS` |
 
-A hosted `api-template` cannot be reached straight from a browser: CORS is enforced against
+A hosted API cannot be reached straight from a browser: CORS is enforced against
 the server's response headers, and the ingress in front of it answers the preflight with a
 404 and challenges with Basic auth. So `API_PROXY_TARGET` routes `/api` through the dev
 server instead — the browser stays same-origin and Node attaches the credentials on the way
@@ -142,7 +144,8 @@ Leave `API_PROXY_TARGET` unset and there is no proxy at all.
 ```
 src/
   app/        main.tsx, App.tsx, providers (QueryClient, Router, Mantine)
-  api/        config.ts, types.ts, templatesClient.ts — the API contract, nothing else
+  api/        config.ts, types.ts, wire.ts, templatesClient.ts — the API contract, nothing else
+              (wire.ts is the only place that knows the wire is snake_case)
   preview/    client.ts, protocol.ts, preview.worker.ts — the local render engine
   lib/        errors.ts (ApiError -> UI), idempotency.ts
   queries/    TanStack Query hooks over the client and the preview engine
@@ -160,8 +163,8 @@ only `queries/` does — and `api/` never imports React.
 ## Prerequisites
 
 - Node.js 22+, npm 10+
-- The `api-template` backend (locally, or reachable through the proxy above)
+- The `notification-template-service` backend (locally, or reachable through the proxy above)
 - `notifications-sender-service` checked out as a sibling, to sync or fully verify the
   render core
 
-For the endpoint contract, see `api-template/docs/API.md`.
+For the endpoint contract, see the service's Swagger UI (`/swagger-ui.html`).
