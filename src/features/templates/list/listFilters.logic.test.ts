@@ -1,17 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
-  DEFAULT_LIST_SORT,
   EMPTY_LIST_FILTER_STATE,
   buildListParams,
 } from "./listFilters.logic";
 
 describe("buildListParams", () => {
-  it("always sends page, size and the default sort", () => {
+  it("always sends page and size, and never a sort", () => {
     const params = buildListParams(EMPTY_LIST_FILTER_STATE);
     expect(params).toEqual({
       page: 0,
       size: 20,
-      sort: DEFAULT_LIST_SORT,
     });
   });
 
@@ -48,7 +46,6 @@ describe("buildListParams", () => {
       collector: "BBVA",
       page: 2,
       size: 50,
-      sort: DEFAULT_LIST_SORT,
     });
   });
 

@@ -1,5 +1,7 @@
-// TypeScript models mirroring the backend DTOs exactly.
-// Source of truth: api-template/docs/INTEGRATION.md + API.md (verbatim).
+// The API's DTOs as the rest of the UI sees them: same fields, camelCase.
+// The wire speaks snake_case; ./wire translates at the boundary, so nothing
+// outside src/api/ ever sees `action_type`. Source of truth for the fields:
+// notification-template-service's /v3/api-docs.
 // Instants are ISO-8601 strings over the wire.
 
 // Shared enum — the version lifecycle status. Authoring and publishing are
@@ -56,6 +58,11 @@ export interface PublishRequest {
 // ---- Admin: upload-url (Mode B) ----
 export interface UploadUrlRequest {
   templateKey: string;
+  // Optional: when sent, the server checks them against the templateKey before
+  // handing out a URL, instead of finding the mismatch on commit.
+  action?: string;
+  actionType?: string;
+  collector?: string;
 }
 export interface UploadUrlResponse {
   uploadUrl: string; // presigned S3 URL — PUT the HTML here
@@ -122,8 +129,9 @@ export interface ListTemplatesParams {
   collector?: string;
   status?: TemplateStatus;
   page?: number; // 0-based
-  size?: number;
-  sort?: string; // e.g. "createdAt,desc"
+  size?: number; // capped at 2000 by the server
+  // No `sort`: the list is served in ONE fixed order (templateKey ascending,
+  // version descending) so pages cannot shift under a caller-chosen order.
 }
 
 // ---- Read: resolve ----

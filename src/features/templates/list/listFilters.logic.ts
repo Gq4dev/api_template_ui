@@ -22,8 +22,6 @@ export interface ListFilterState {
   size: number;
 }
 
-export const DEFAULT_LIST_SORT = "createdAt,desc";
-
 export const EMPTY_LIST_FILTER_STATE: ListFilterState = {
   status: "",
   templateKey: "",
@@ -36,13 +34,13 @@ export const EMPTY_LIST_FILTER_STATE: ListFilterState = {
 /**
  * Builds the `GET /api/v1/templates` query params from the filter state.
  * Empty/whitespace-only text filters are dropped so they never hit the wire;
- * page/size are coerced to numbers; sort defaults to createdAt,desc.
+ * page/size are coerced to numbers. There is no sort to send: the server
+ * lists in one fixed order (templateKey ascending, version descending).
  */
 export function buildListParams(state: ListFilterState): ListTemplatesParams {
   const params: ListTemplatesParams = {
     page: Number(state.page),
     size: Number(state.size),
-    sort: DEFAULT_LIST_SORT,
   };
 
   const status = state.status.trim();

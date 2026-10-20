@@ -11,23 +11,28 @@ import { templatesApi } from "../api/templatesClient";
 import type { PageResponse, TemplateSummary } from "../api/types";
 import { templateKeys } from "./queryKeys";
 
-export const CATALOGUE_PAGE_SIZE = 500;
+/**
+ * The server's maximum page size: larger requests are silently capped to it.
+ * Asking for the cap means today's catalogue is ONE request, and one request
+ * has no page boundary for a concurrent write to move.
+ */
+export const CATALOGUE_PAGE_SIZE = 2000;
 
 /**
- * A hard stop: 20 pages × 500 = 10 000 versions.
+ * A hard stop: 5 pages × 2000 = 10 000 versions.
  *
  * Far above today's catalogue, and low enough that a runaway `totalPages` from a
  * misbehaving server cannot turn one page load into hundreds of requests. Hitting
  * it is reported as truncation, never silently.
  */
-export const MAX_CATALOGUE_PAGES = 20;
+export const MAX_CATALOGUE_PAGES = 5;
 
-/**
- * Oldest first, so versions created while the pages are being walked land at
- * the END and cannot shift a row from a page already read into one not yet
- * read — which a newest-first order would do, duplicating or skipping rows.
- */
-export const CATALOGUE_SORT = "createdAt,asc";
+// No sort parameter: the API serves the list in one fixed order (templateKey
+// ascending, version descending) and accepts no other. That order is NOT
+// append-only — a version created mid-walk lands inside an already-read page
+// and pushes a row across the boundary — so a multi-page walk can skip a row.
+// The de-duplication below absorbs the duplicate half of that, and a skipped
+// row shows up as `truncated`, because the count no longer adds up.
 
 export interface FullCatalogue {
   content: TemplateSummary[];
@@ -84,7 +89,7 @@ export function useFullCatalogue() {
     queryKey: templateKeys.fullCatalogue(),
     queryFn: () =>
       fetchWholeCatalogue((page, size) =>
-        templatesApi.list({ page, size, sort: CATALOGUE_SORT }),
+        templatesApi.list({ page, size }),
       ),
   });
 }

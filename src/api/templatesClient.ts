@@ -1,5 +1,9 @@
-// Framework-agnostic, dependency-free (fetch) typed client.
-// Source of truth: api-template/docs/INTEGRATION.md + API.md.
+// Framework-agnostic, dependency-free (fetch) typed client for
+// notification-template-service. Source of truth: its /v3/api-docs.
+//
+// Every method takes and returns the camelCase types of ./types; the
+// snake_case wire shapes and the translation both ways live in ./wire, so this
+// file only decides URLs, methods and headers.
 //
 // Deviation from the doc's verbatim snippet: `ApiError`'s constructor cannot use
 // TypeScript parameter-property shorthand (`constructor(readonly status: number, ...)`)
@@ -9,20 +13,35 @@
 import { API_BASE_URL } from "./config";
 import type {
   CreateTemplateRequest,
-  CreateTemplateResponse,
   UploadUrlRequest,
-  UploadUrlResponse,
   CommitRequest,
   UpdateDraftRequest,
   PublishRequest,
-  VersionStatusResponse,
-  ResolveResponse,
-  TemplateContentResponse,
-  TemplateSummary,
-  PageResponse,
   ListTemplatesParams,
   ApiErrorBody,
 } from "./types";
+import {
+  fromWireContent,
+  fromWireCreateResult,
+  fromWirePage,
+  fromWireResolve,
+  fromWireSummary,
+  fromWireUploadUrl,
+  fromWireVersionStatus,
+  toWireCommit,
+  toWireCreate,
+  toWireListQuery,
+  toWirePublish,
+  toWireUpdateDraft,
+  toWireUploadUrl,
+  type WireCreateTemplateResult,
+  type WirePageResult,
+  type WireResolveResult,
+  type WireTemplateContentResult,
+  type WireTemplateSummaryResult,
+  type WireUploadUrlResult,
+  type WireVersionStatusResult,
+} from "./wire";
 
 export class ApiError extends Error {
   readonly status: number;
@@ -58,17 +77,9 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   return body as T;
 }
 
-// Serializes list params into a query string, dropping undefined/empty values.
-// Numbers are stringified; page/size 0 are legitimate so only undefined/"" drop.
-function buildListQuery(params: ListTemplatesParams): string {
-  const search = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value === undefined || value === null || value === "") continue;
-    search.set(key, String(value));
-  }
-  const qs = search.toString();
-  return qs ? `?${qs}` : "";
-}
+// Path segments are user-chosen strings (a collector suffix included), so they
+// are encoded rather than trusted to be URL-safe.
+const seg = encodeURIComponent;
 
 export const templatesApi = {
   // --- Admin ---
@@ -78,7 +89,7 @@ export const templatesApi = {
   ) {
     // Empty path is intentional: API_BASE_URL already targets the collection
     // endpoint (/api/v1/templates), so POST goes straight to it.
-    return request<CreateTemplateResponse>("", {
+    return request<WireCreateTemplateResult>("", {
       method: "POST",
       headers: {
         ...(opts?.author ? { "X-User-Email": opts.author } : {}),
@@ -86,23 +97,23 @@ export const templatesApi = {
           ? { "Idempotency-Key": opts.idempotencyKey }
           : {}),
       },
-      body: JSON.stringify(payload),
-    });
+      body: JSON.stringify(toWireCreate(payload)),
+    }).then(fromWireCreateResult);
   },
 
   requestUploadUrl(payload: UploadUrlRequest) {
-    return request<UploadUrlResponse>("/upload-url", {
+    return request<WireUploadUrlResult>("/upload-url", {
       method: "POST",
-      body: JSON.stringify(payload),
-    });
+      body: JSON.stringify(toWireUploadUrl(payload)),
+    }).then(fromWireUploadUrl);
   },
 
   commit(payload: CommitRequest, opts?: { author?: string }) {
-    return request<CreateTemplateResponse>("/commit", {
+    return request<WireCreateTemplateResult>("/commit", {
       method: "POST",
       headers: opts?.author ? { "X-User-Email": opts.author } : {},
-      body: JSON.stringify(payload),
-    });
+      body: JSON.stringify(toWireCommit(payload)),
+    }).then(fromWireCreateResult);
   },
 
   // Save a correction to a DRAFT. Same version number, same s3Key — only the
@@ -117,14 +128,14 @@ export const templatesApi = {
     payload: UpdateDraftRequest,
     opts?: { author?: string },
   ) {
-    return request<CreateTemplateResponse>(
-      `/${templateKey}/versions/${version}`,
+    return request<WireCreateTemplateResult>(
+      `/${seg(templateKey)}/versions/${version}`,
       {
         method: "PUT",
         headers: opts?.author ? { "X-User-Email": opts.author } : {},
-        body: JSON.stringify(payload),
+        body: JSON.stringify(toWireUpdateDraft(payload)),
       },
-    );
+    ).then(fromWireCreateResult);
   },
 
   // The one call that puts a template in front of customers. An empty payload
@@ -138,42 +149,43 @@ export const templatesApi = {
     payload: PublishRequest = {},
     opts?: { author?: string },
   ) {
-    return request<VersionStatusResponse>(
-      `/${templateKey}/versions/${version}/publish`,
+    return request<WireVersionStatusResult>(
+      `/${seg(templateKey)}/versions/${version}/publish`,
       {
         method: "POST",
         headers: opts?.author ? { "X-User-Email": opts.author } : {},
-        body: JSON.stringify(payload),
+        body: JSON.stringify(toWirePublish(payload)),
       },
-    );
+    ).then(fromWireVersionStatus);
   },
 
-  // archive() intentionally sends no X-User-Email header: per the backend
-  // contract (INTEGRATION.md §8) the audit header applies to create/commit only.
+  // archive() sends no X-User-Email header: the endpoint does not declare one.
   archive(templateKey: string, version: number) {
-    return request<VersionStatusResponse>(
-      `/${templateKey}/versions/${version}/archive`,
+    return request<WireVersionStatusResult>(
+      `/${seg(templateKey)}/versions/${version}/archive`,
       { method: "POST" },
-    );
+    ).then(fromWireVersionStatus);
   },
 
   // --- Read ---
   list(params: ListTemplatesParams = {}) {
-    return request<PageResponse<TemplateSummary>>(buildListQuery(params));
+    return request<WirePageResult<WireTemplateSummaryResult>>(toWireListQuery(params)).then(
+      (page) => fromWirePage(page, fromWireSummary),
+    );
   },
 
   resolve(templateKey: string, at?: string) {
     const q = at ? `?at=${encodeURIComponent(at)}` : "";
-    return request<ResolveResponse>(`/${templateKey}/resolve${q}`);
+    return request<WireResolveResult>(`/${seg(templateKey)}/resolve${q}`).then(fromWireResolve);
   },
 
   // ONE specific version, with its HTML, addressed rather than resolved.
   // Works for every status — including DRAFT, which is in effect at no instant
   // and therefore unreachable by any resolve call.
   getVersion(templateKey: string, version: number) {
-    return request<TemplateContentResponse>(
-      `/${templateKey}/versions/${version}`,
-    );
+    return request<WireTemplateContentResult>(
+      `/${seg(templateKey)}/versions/${version}`,
+    ).then(fromWireContent);
   },
 
   // Effective version WITH html, resolved by action + actionType.
@@ -197,10 +209,12 @@ export const templatesApi = {
     actionType: string,
     opts?: { collector?: string; at?: string },
   ) {
-    const search = new URLSearchParams({ action, actionType });
+    const search = new URLSearchParams({ action, action_type: actionType });
     if (opts?.collector) search.set("collector", opts.collector);
     if (opts?.at) search.set("at", opts.at);
-    return request<TemplateContentResponse>(`/resolve?${search.toString()}`);
+    return request<WireTemplateContentResult>(`/resolve?${search.toString()}`).then(
+      fromWireContent,
+    );
   },
 
   // Rendering and validation are NOT here. The API stores templates and decides
