@@ -471,6 +471,7 @@ describe("identity cascade", () => {
       action: "payment",
       actionType: "approved",
       at: "2026-09-11T19:20:53Z",
+      truncated: false,
       generic: {
         templateKey: "payment_approved",
         version: 1,
@@ -554,6 +555,7 @@ describe("identity cascade", () => {
       action: "payment",
       actionType: "approved",
       at: "2026-09-11T19:20:53Z",
+      truncated: false,
       generic: null,
       collectors: [],
     };
@@ -633,6 +635,7 @@ describe("identity cascade", () => {
       action: "payment",
       actionType: "approved",
       at: "2026-09-11T19:20:53Z",
+      truncated: false,
       generic: null,
       collectors: [],
     };
@@ -737,6 +740,7 @@ describe("identity cascade", () => {
         action: "payment",
         actionType: "approved",
         at: "2026-09-11T19:20:53Z",
+        truncated: false,
         generic,
         collectors: [],
       };
@@ -782,6 +786,26 @@ describe("identity cascade", () => {
     // where nothing is being delivered.
     it("claims nothing without an inventory", () => {
       expect(genericDelivery(null)).toBe("UNKNOWN");
+    });
+
+    // An incomplete catalogue cannot prove an absence: the generic may be in
+    // the rows that were not read.
+    it("claims nothing for a missing generic in a truncated inventory", () => {
+      expect(genericDelivery({ ...withGeneric(null), truncated: true })).toBe("UNKNOWN");
+    });
+
+    it("still reads a generic that WAS found in a truncated inventory", () => {
+      expect(
+        genericDelivery({
+          ...withGeneric({
+            templateKey: "payment_approved",
+            version: 2,
+            status: "DRAFT",
+            servable: false,
+          }),
+          truncated: true,
+        }),
+      ).toBe("NOT_SERVABLE");
     });
   });
 
@@ -1218,6 +1242,7 @@ describe("mergeInventoryAnswers", () => {
     at: string,
     collectors: ReturnType<typeof entry>[],
     generic: typeof GENERIC | null = GENERIC,
+    truncated = false,
   ) => ({
     data: {
       action: "PAYMENT",
@@ -1225,6 +1250,7 @@ describe("mergeInventoryAnswers", () => {
       at,
       collectors,
       generic,
+      truncated,
     } as CollectorsInventory,
     isLoading: false,
     isError: false,
@@ -1305,6 +1331,15 @@ describe("mergeInventoryAnswers", () => {
     ]);
     expect(agreeing.genericDivergent).toBe(false);
   });
+
+  it("is truncated when any spelling's answer is", () => {
+    const complete = answer("2026-09-15T10:05:00Z", []);
+    expect(
+      mergeInventoryAnswers([complete, answer("2026-09-15T10:05:00Z", [], GENERIC, true)])
+        .inventory?.truncated,
+    ).toBe(true);
+    expect(mergeInventoryAnswers([complete, complete]).inventory?.truncated).toBe(false);
+  });
 });
 
 describe("inventoryFromCatalogue", () => {
@@ -1339,7 +1374,7 @@ describe("inventoryFromCatalogue", () => {
       version("payment_approved", null, 2, "SCHEDULED", "2026-10-21T00:00:00Z"),
       version("payment_approved", null, 3, "DRAFT"),
     ];
-    const inventory = inventoryFromCatalogue(rows, PAIR, FETCHED, NOW);
+    const inventory = inventoryFromCatalogue(rows, PAIR, FETCHED, NOW, false);
     expect(inventory.generic).toEqual({
       templateKey: "payment_approved",
       version: 1,
@@ -1356,7 +1391,7 @@ describe("inventoryFromCatalogue", () => {
       version("payment_approved", null, 4, "ACTIVE", from),
       version("payment_approved", null, 5, "ACTIVE", from),
     ];
-    expect(inventoryFromCatalogue(rows, PAIR, FETCHED, NOW).generic?.version).toBe(5);
+    expect(inventoryFromCatalogue(rows, PAIR, FETCHED, NOW, false).generic?.version).toBe(5);
   });
 
   it("keeps a collector with nothing servable, at its latest version", () => {
@@ -1365,7 +1400,7 @@ describe("inventoryFromCatalogue", () => {
       version("payment_approved__bbva", "bbva", 2, "DRAFT"),
       version("payment_approved__amex", "amex", 1, "ACTIVE", "2026-01-01T00:00:00Z"),
     ];
-    const inventory = inventoryFromCatalogue(rows, PAIR, FETCHED, NOW);
+    const inventory = inventoryFromCatalogue(rows, PAIR, FETCHED, NOW, false);
     expect(inventory.generic).toBeNull();
     expect(inventory.collectors).toEqual([
       { collector: "amex", templateKey: "payment_approved__amex", version: 1, status: "ACTIVE", servable: true },
@@ -1376,7 +1411,7 @@ describe("inventoryFromCatalogue", () => {
   it("re-reads effectivity windows at the evaluation instant", () => {
     // Listed as SCHEDULED when fetched, live by the time the page re-renders.
     const rows = [version("payment_approved", null, 1, "SCHEDULED", "2026-10-20T11:59:00Z")];
-    expect(inventoryFromCatalogue(rows, PAIR, FETCHED, NOW).generic).toMatchObject({
+    expect(inventoryFromCatalogue(rows, PAIR, FETCHED, NOW, false).generic).toMatchObject({
       status: "ACTIVE",
       servable: true,
     });
@@ -1384,7 +1419,7 @@ describe("inventoryFromCatalogue", () => {
     const expired = [
       version("payment_approved", null, 1, "ACTIVE", "2026-01-01T00:00:00Z", "2026-10-20T12:00:00Z"),
     ];
-    expect(inventoryFromCatalogue(expired, PAIR, FETCHED, NOW).generic).toMatchObject({
+    expect(inventoryFromCatalogue(expired, PAIR, FETCHED, NOW, false).generic).toMatchObject({
       status: "ARCHIVED",
       servable: false,
     });
@@ -1394,11 +1429,17 @@ describe("inventoryFromCatalogue", () => {
     const rows = [
       { ...version("payment_approved", null, 1, "ACTIVE", "2026-01-01T00:00:00Z"), action: "PAYMENT" },
     ];
-    expect(inventoryFromCatalogue(rows, PAIR, FETCHED, NOW).generic).toBeNull();
+    expect(inventoryFromCatalogue(rows, PAIR, FETCHED, NOW, false).generic).toBeNull();
     expect(
-      inventoryFromCatalogue(rows, { action: "PAYMENT", actionType: "approved" }, FETCHED, NOW)
+      inventoryFromCatalogue(rows, { action: "PAYMENT", actionType: "approved" }, FETCHED, NOW, false)
         .generic,
     ).not.toBeNull();
+  });
+
+  it("carries the catalogue's truncation onto the answer", () => {
+    const rows = [version("payment_approved__bbva", "bbva", 1, "ACTIVE", "2026-01-01T00:00:00Z")];
+    expect(inventoryFromCatalogue(rows, PAIR, FETCHED, NOW, true).truncated).toBe(true);
+    expect(inventoryFromCatalogue(rows, PAIR, FETCHED, NOW, false).truncated).toBe(false);
   });
 
   it("takes DRAFT and ARCHIVED as reported", () => {

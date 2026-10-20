@@ -811,12 +811,16 @@ export type GenericDelivery =
  * comfortable case. "Probably there is a generic" rendered as silence is the same class of bug as
  * reading an absent `fallbackToGeneric` as `false`: the page would be quietest
  * in exactly the situation where nothing is being delivered.
+ *
+ * UNKNOWN, too, for no generic in a TRUNCATED inventory: the generic may be in
+ * the rows that were not read, and claiming MISSING would be a red alert built
+ * on an absence the page cannot vouch for.
  */
 export function genericDelivery(
   inventory: CollectorsInventory | null,
 ): GenericDelivery {
   if (!inventory) return "UNKNOWN";
-  if (inventory.generic == null) return "MISSING";
+  if (inventory.generic == null) return inventory.truncated ? "UNKNOWN" : "MISSING";
   return inventory.generic.servable ? "SERVED" : "NOT_SERVABLE";
 }
 
@@ -1171,6 +1175,15 @@ export interface CollectorsInventory {
   generic: Omit<CollectorInventoryEntry, "collector"> | null;
   /** One entry per collector, sorted by name in code-point order. */
   collectors: CollectorInventoryEntry[];
+  /**
+   * The catalogue behind this answer was not read in full (see `FullCatalogue`).
+   *
+   * Then an ABSENCE proves nothing: a null `generic` or a collector missing from
+   * `collectors` may simply sit in the rows that were not read. What is present
+   * is still true; what is missing is unknown, and must never be shown as "no
+   * generic" or "no variant".
+   */
+  truncated: boolean;
 }
 
 /**
@@ -1249,12 +1262,14 @@ function inventoryEntryFor(
  *
  * @param fetchedAt when the rows were read — becomes `at`, see {@link CollectorsInventory.at}
  * @param now the instant the effectivity windows are evaluated at
+ * @param truncated whether `rows` is an incomplete catalogue, see {@link CollectorsInventory.truncated}
  */
 export function inventoryFromCatalogue(
   rows: TemplateSummary[],
   spelling: ActionSpelling,
   fetchedAt: number,
   now: number,
+  truncated: boolean,
 ): CollectorsInventory {
   const byKey = new Map<string, TemplateSummary[]>();
   for (const row of rows) {
@@ -1285,6 +1300,7 @@ export function inventoryFromCatalogue(
     at: new Date(fetchedAt).toISOString(),
     generic,
     collectors,
+    truncated,
   };
 }
 
@@ -1408,7 +1424,14 @@ export function mergeInventoryAnswers(answers: InventoryAnswer[]): MergedInvento
   );
 
   return {
-    inventory: { ...arrived[0], at: oldest.at, collectors, generic },
+    inventory: {
+      ...arrived[0],
+      at: oldest.at,
+      collectors,
+      generic,
+      // Incomplete if any part is: the merge is only as complete as its parts.
+      truncated: arrived.some((data) => data.truncated),
+    },
     divergentCollectors,
     genericDivergent,
     isLoading,

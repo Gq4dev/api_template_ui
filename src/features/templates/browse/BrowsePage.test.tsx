@@ -69,12 +69,13 @@ const ROWS = [
   row("withdrawal_create__santander", "withdrawal", "create", "santander"),
 ];
 
-function renderBrowse(rows: TemplateSummary[] = ROWS): User {
+/** `totalElements` above `rows.length` makes the catalogue read as truncated. */
+function renderBrowse(rows: TemplateSummary[] = ROWS, totalElements = rows.length): User {
   vi.mocked(templatesApi.list).mockResolvedValue({
     content: rows,
     page: 0,
     size: 500,
-    totalElements: rows.length,
+    totalElements,
     totalPages: 1,
   });
 
@@ -398,5 +399,41 @@ describe("BrowsePage — a pair written more than one way", () => {
       collector: "bbva",
     });
     expect(screen.queryByText(/más de una forma/i)).not.toBeInTheDocument();
+  });
+});
+
+describe("BrowsePage — a truncated catalogue", () => {
+  async function waitForCollectorList() {
+    await waitFor(() => expect(field(/^collector$/i)).not.toBeDisabled());
+  }
+
+  // santander's variant was read; whether a generic exists is in the rows that were not.
+  const NO_GENERIC_READ = [row("withdrawal_create__santander", "withdrawal", "create", "santander")];
+
+  it("warns in the Collector step and never claims the generic is missing", async () => {
+    const user = renderBrowse(NO_GENERIC_READ, 5);
+    await waitForCatalogue();
+    await pick(user, /^action$/i, "withdrawal (1)");
+    await waitForCollectorList();
+
+    expect(await screen.findByText("Inventario incompleto")).toBeInTheDocument();
+    expect(screen.queryByText(/no existe plantilla genérica/i)).not.toBeInTheDocument();
+
+    const listbox = await openList(user, /^collector$/i);
+    const texts = within(listbox)
+      .getAllByRole("option")
+      .map((option) => option.textContent ?? "");
+    expect(texts.find((text) => text.startsWith("Genérica"))).toContain("No encontrada");
+    expect(texts.find((text) => text.startsWith("santander"))).toContain("Se envía la suya");
+  });
+
+  it("does claim it when the catalogue was read in full", async () => {
+    const user = renderBrowse(NO_GENERIC_READ);
+    await waitForCatalogue();
+    await pick(user, /^action$/i, "withdrawal (1)");
+    await waitForCollectorList();
+
+    expect(await screen.findByText(/no existe plantilla genérica/i)).toBeInTheDocument();
+    expect(screen.queryByText("Inventario incompleto")).not.toBeInTheDocument();
   });
 });

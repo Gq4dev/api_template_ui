@@ -5,6 +5,8 @@
 // it is answered from the full catalogue the browse page already loads (see
 // `inventoryFromCatalogue`). Reading the same TanStack entry costs no extra
 // request: the catalogue query is shared, and every write invalidates it.
+// Its `truncated` flag travels with every answer, so an incomplete catalogue is
+// never read as "no generic" or "no variant".
 import type { ActionSpelling } from "../lib/actionNames";
 import {
   inventoryFromCatalogue,
@@ -37,7 +39,13 @@ export function useCollectorsInventories(spellings: ActionSpelling[]): Inventory
     return {
       data:
         ready && rows
-          ? inventoryFromCatalogue(rows, spelling, catalogue.dataUpdatedAt, now)
+          ? inventoryFromCatalogue(
+              rows,
+              spelling,
+              catalogue.dataUpdatedAt,
+              now,
+              catalogue.data?.truncated ?? false,
+            )
           : null,
       isLoading: ready && catalogue.isLoading,
       isError: catalogue.isError,

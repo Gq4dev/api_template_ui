@@ -316,10 +316,17 @@ export function BrowsePage() {
       return (
         <Group justify="space-between" gap="xs" wrap="nowrap" w="100%">
           <Text size="sm">{option.label}</Text>
+          {/* Truncated: the generic may be in the rows that were not read. */}
           {isGeneric ? (
-            <Badge size="xs" color="red" variant="light">
-              No existe
-            </Badge>
+            inventory?.truncated ? (
+              <Badge size="xs" color="gray" variant="light">
+                No encontrada
+              </Badge>
+            ) : (
+              <Badge size="xs" color="red" variant="light">
+                No existe
+              </Badge>
+            )
           ) : null}
         </Group>
       );
@@ -331,7 +338,10 @@ export function BrowsePage() {
         ? { color: "red", text: "No vigente" }
         : generic === "SERVED"
           ? { color: "yellow", text: "Recibe la genérica" }
-          : { color: "red", text: "No recibe nada" };
+          : generic === "UNKNOWN"
+            ? // Only with a truncated inventory: the generic was not found, not proven absent.
+              { color: "gray", text: "Sin confirmar" }
+            : { color: "red", text: "No recibe nada" };
 
     return (
       <Group justify="space-between" gap="xs" wrap="nowrap" w="100%">
@@ -939,6 +949,22 @@ export function BrowsePage() {
         ) : null}
 
         {/*
+          AN INCOMPLETE CATALOGUE, said where the list is read.
+
+          The page-level truncation notice below is easy to miss from here, and
+          this step is where an absence turns into a claim: "no generic", "no
+          variant". With a truncated inventory those absences prove nothing, so
+          `genericDelivery` answers UNKNOWN instead of MISSING and this says why.
+        */}
+        {source === "INVENTORY" && inventory?.truncated ? (
+          <Alert color="yellow" title="Inventario incompleto" mt="sm">
+            No se leyó el catálogo completo, así que esta lista puede no incluir
+            todos los collectors con variante propia, y una genérica que no
+            aparece puede existir igual.
+          </Alert>
+        ) : null}
+
+        {/*
           NO GENERIC — AND THIS IS NOT THE FALLBACK NOTICE.
 
           Every other message on this page about a collector without its own
@@ -1007,7 +1033,9 @@ export function BrowsePage() {
         */}
         {source === "INVENTORY" && inventory?.collectors.length === 0 ? (
           <Text size="sm" c="dimmed" mt="xs">
-            {generic === "SERVED"
+            {inventory.truncated
+              ? "No se encontró ninguna variante por collector para esta terna en el catálogo leído, que está incompleto."
+              : generic === "SERVED"
               ? "No hay ninguna variante por collector para esta terna: todos los clientes reciben la genérica."
               : "No hay ninguna variante por collector para esta terna."}
           </Text>
